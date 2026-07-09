@@ -10,18 +10,23 @@
 4. **Complexity is stated honestly as relative effort** — S (days), M (roughly a week or two of focused solo work), L (several weeks) — never as calendar dates, because solo availability is unknown and fabricated precision violates the project's own calibration principle (CC §5). Phases marked ⏳ additionally require **irreducible elapsed real-usage time** (data must accumulate) that no amount of engineering speed can compress.
 5. **Amending the roadmap is allowed but never silent**: reordering, splitting, or adding phases is a written amendment with rationale, committed like everything else (same discipline as Constitution amendments).
 
+## Amendments
+
+**Amendment 1 (2026-07-09) — Phase 2 split into 2A and 2B.** The original Phase 2 bundled the generic reasoning infrastructure (graph executor, trace domain) together with its first trading application (LLM/vision adapters, four trading specialists, `dolmir analyze`). Split, at the product owner's direction: **Phase 2A** builds the Cognitive Reasoning Engine as pure, domain-agnostic infrastructure — nothing in it knows what trading, ICT, or liquidity is, so domain independence is guaranteed by construction rather than by discipline (DOLMIR could later reason about medicine or law by swapping domain specialists, per EC §8). **Phase 2B** is the original vertical-slice remainder, now built *on* 2A. Rationale: the reasoning capability is DOLMIR's highest-leverage component; entangling it with its first consumer would let trading vocabulary leak into the substrate. Elsewhere in this document, references to "Phase 2" as a dependency mean **2B** where live agents/LLM adapters are implied, and are already satisfied by **2A** where only the graph/trace machinery is meant.
+
 ## Phase Dependency Graph
 
 ```mermaid
 graph TD
-    P1[1. Kernel Skeleton & CI Enforcement] --> P2[2. First Vertical Slice]
-    P2 --> P3[3. Journal Engine & Outcomes]
-    P2 --> P4[4. Knowledge Engine & KB v1]
-    P2 --> P6[6. Evaluation Harness]
+    P1[1. Kernel Skeleton & CI Enforcement] --> P2A[2A. Cognitive Reasoning Engine]
+    P2A --> P2B[2B. First Vertical Slice]
+    P2B --> P3[3. Journal Engine & Outcomes]
+    P2B --> P4[4. Knowledge Engine & KB v1]
+    P2B --> P6[6. Evaluation Harness]
     P3 --> P5[5. Episodic Memory & Context]
-    P2 --> P5
+    P2B --> P5
     P6 --> P7[7. Backtesting & Replay]
-    P2 --> P7
+    P2B --> P7
     P3 --> P8[8. Slow Loop: Reflection & Calibration ⏳]
     P5 --> P8
     P7 -. volume .-> P8
@@ -46,7 +51,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 | Arc | Phases | What the system can do at the end of it |
 |---|---|---|
-| A — Foundation | 1–2 | Boot, enforce its own architecture, produce one real explainable analysis end-to-end |
+| A — Foundation | 1–2B | Boot, enforce its own architecture, reason generically over any domain, produce one real explainable analysis end-to-end |
 | B — Grounding & Record | 3–5 | Cite doctrine, record trades and outcomes, remember and retrieve its own past |
 | C — Measurement | 6–7 | Grade its own agents, replay history without lookahead, benchmark itself |
 | D — Learning | 8–9 | Learn from outcomes (process-graded), model the trader, modulate risk psychologically |
@@ -66,15 +71,26 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 - **Risks:** Over-building kernel types nobody needs yet — mitigated by the `Money` deferral and shared-kernel change-control policy (CA §5).
 - **Future impact:** The `ClockPort` decision made here is what makes Phase 7 backtesting possible without rewriting engines. The import contracts police every line of the next decade.
 
-## Phase 2 — First Vertical Slice: One Explainable Analysis End-to-End
+## Phase 2A — Cognitive Reasoning Engine *(Amendment 1)*
+
+- **Objective:** The generic reasoning infrastructure every future specialist runs on: typed graph execution, structured reasoning objects, debate/falsification/decision staging, deterministic confidence synthesis, and the explainability pipeline — with **zero domain knowledge**. Nothing in this phase knows what trading, ICT, or liquidity is.
+- **Why it exists:** Reasoning capability is DOLMIR's highest-leverage component (CogA). Building it before any consumer exists guarantees domain independence *by construction*: the engine is proven against a non-trading test domain, so future domains (EC §8) swap in specialists without touching the substrate.
+- **Dependencies:** Phase 1.
+- **Deliverables:** Graph executor (typed dataflow: nodes declare required/produced artifact *types*, edges are derived, independent nodes run concurrently, failure is data — `Result[NodeReport, NodeFailure]`); `GraphContext` (the run's working memory, CogA §11); structured reasoning objects with `schema_version` (Standing Rule 6): `Evidence`, `Claim` with epistemic-status tags (CC §8) and structural grounding (a FACT is unconstructible without citation/computation evidence — CC §2), `Hypothesis` requiring a pre-registered falsification condition (CC §4), `HypothesisSet` structurally requiring an inaction option (CC §6), `AgentOpinion` (per-hypothesis stances), `Challenge`/`FalsificationReport` (structural coverage of every hypothesis — CC §9), ordered `Confidence` vocabulary (CC §5) with deterministic synthesis (Standing Rule 4), `Conclusion`, `ReasoningTrace`; stage-node toolkit (deliberation, falsification, confidence synthesis, chief decision) with `ChiefDecisionPort` + a deterministic reference implementation; explanation builder rendering any completed trace into structured, legible prose (CC §11); `ReasoningTraceRepositoryPort` + in-memory adapter (SQLite arrives with 2B's CLI flow).
+- **Exit criteria:** A complete reasoning run — observations → hypotheses → parallel debate → falsification → confidence synthesis → conclusion → explanation — demonstrated end-to-end in a deliberately **non-trading** test domain; the constitutional rules are enforced structurally (tests prove the illegal states are unconstructible); falsification is unskippable (a deciding graph without it fails assembly); full gate green in CI on PR #1.
+- **Complexity:** L.
+- **Risks:** Over-abstracting ahead of the first real consumer — mitigated by building exactly the mechanisms the Foundation's cognitive pipeline names, nothing speculative; 2B immediately validates the API against a real consumer.
+- **Future impact:** Every agent DOLMIR ever runs — trading or otherwise — executes on this substrate. Its structural guarantees (grounding, falsifiability, inaction, mandatory self-critique) are what make the Cognitive Constitution enforceable rather than aspirational.
+
+## Phase 2B — First Vertical Slice: One Explainable Analysis End-to-End
 
 - **Objective:** `dolmir analyze <chart-image>` runs the fast loop minimally — perception → understanding → hypotheses (including no-trade) → debate → deterministic Risk Gate → trader-legible explained decision — with the full reasoning trace persisted.
-- **Why it exists:** CA §20: the vertical slice *is* the acceptance test of the entire foundation. It establishes the typed-graph, typed-opinion, versioned-trace patterns every subsequent cognitive feature copies.
-- **Dependencies:** Phase 1.
-- **Deliverables:** Graph executor v1 (typed nodes, `Result`-returning, parallel independent branches); `Hypothesis`/`AgentOpinion`/`ReasoningTrace` domain with epistemic-status tags (CC §8), pre-registered falsification conditions (CC §4), and `schema_version` from the very first persisted record; Anthropic `LLMProviderPort` adapter + cassette-based **contract test suite** (the template for all future providers); `ChartVisionExtractorPort` via multimodal call; four agents — combined Market/ICT Analyst, Risk Manager Agent, Devil's Advocate, Chief Decision Agent — plus the deterministic `RiskGate` as mandatory terminal node; SQLite trace persistence; cost/latency instrumentation on every LLM call from call number one; `dolmir analyze`, `dolmir trace show`.
+- **Why it exists:** CA §20: the vertical slice *is* the acceptance test of the entire foundation, now including 2A's engine: the first real consumer validates the generic API.
+- **Dependencies:** Phases 1, 2A.
+- **Deliverables:** Anthropic `LLMProviderPort` adapter + cassette-based **contract test suite** (the template for all future providers); `ChartVisionExtractorPort` via multimodal call; four trading agents — combined Market/ICT Analyst, Risk Manager Agent, Devil's Advocate, Chief Decision Agent — as 2A graph nodes, plus the deterministic `RiskGate` as mandatory terminal node; SQLite `ReasoningTrace` persistence behind 2A's repository port; cost/latency instrumentation on every LLM call from call number one; `dolmir analyze`, `dolmir trace show`.
 - **Key decision recorded:** chart-image input first, market-data vendor deferred to Phase 7 — no vendor dependency, it exercises the cognitive pipeline's perception stage directly, and it matches how an ICT trader actually works (charts, screenshots).
 - **Exit criteria:** ≥3 different real charts produce structurally valid, trader-legible analyses, including at least one honest "no clear edge" conclusion; a trace fully reconstructs the reasoning behind a decision; the Risk Gate demonstrably vetoes an over-limit proposal; per-run cost is visible; CI green including LLM contract tests (cassettes).
-- **Complexity:** L — the hardest single phase; first contact with everything at once.
+- **Complexity:** M–L (reduced from L: the reasoning machinery already exists from 2A).
 - **Risks:** Vision-extraction quality (mitigate: tightly-schema'd structured extraction, human-checkable output); prompt quality is unvalidated until Phase 6 — accepted and documented, not hidden; per-analysis LLM cost — tracked from the first call.
 - **Future impact:** The trace/opinion schemas persisted here are the start of the system's lifetime memory — getting `schema_version` and epistemic tagging right now protects years of future data.
 
@@ -82,7 +98,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** An append-only journal: the trader records trades, decisions, and outcomes; DOLMIR's own decisions link to their eventual outcomes.
 - **Why it exists:** The journal is the ground truth that every learning mechanism consumes — slow loop, calibration, TraderProfile all read it. Without recorded outcomes, nothing can ever be learned (CC §7).
-- **Dependencies:** Phase 1 (Phase 2 soft — decision↔trace linkage needs traces to exist).
+- **Dependencies:** Phase 1 (Phase 2B soft — decision↔trace linkage needs persisted traces to exist).
 - **Deliverables:** Journal domain (immutable entries; the repository port exposes no update/delete — CA §6); decision↔trade↔outcome linkage; SQLite adapter; `dolmir journal add/list/link/close`; optional CSV import for pre-existing trade history.
 - **Exit criteria:** Full round trip demonstrated: analysis → decision recorded → trade journaled → outcome recorded → linkage queryable; tests prove no mutation path exists.
 - **Complexity:** M.
@@ -93,7 +109,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** Agents cite curated ICT/SMC/psychology doctrine retrieved from the Knowledge Base instead of trusting model weights.
 - **Why it exists:** The grounding discipline (CC §2) and provider independence (doctrine survives model swaps — CA §12) both structurally require retrieval, not parametric memory.
-- **Dependencies:** Phases 1, 2 (agents exist to consume it).
+- **Dependencies:** Phases 1, 2B (agents exist to consume it).
 - **Deliverables:** Markdown front-matter schema; ingestion pipeline (chunk → embed → index) behind `EmbeddingProviderPort`; local vector-store adapter (library chosen in this phase's planning pass); `KnowledgeRepositoryPort.search()`; doctrine citations (document id + version) appearing in `AgentOpinion`s and traces; starter KB content — the user's collected material if provided by then, otherwise a small drafted starter set explicitly marked for the user's correction; `dolmir kb ingest/search`.
 - **Exit criteria:** An agent's claim about a doctrine concept cites the KB passage that grounds it; editing a KB document changes system behavior with zero code changes (EC §6 verified); re-ingestion is idempotent.
 - **Complexity:** M.
@@ -104,7 +120,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** Past analyses and their outcomes become retrievable experience: "have we seen this setup before, and what happened?"
 - **Why it exists:** Compounding memory is the core product promise (EC §1); episodic records are also the replay corpus for every future re-derivation of higher-level models (CA §9/§11).
-- **Dependencies:** Phases 2 (traces), 3 (outcomes).
+- **Dependencies:** Phases 2B (persisted traces), 3 (outcomes).
 - **Deliverables:** `Episode` schema (versioned) assembled from trace + journal outcome; `EpisodicMemoryRepositoryPort` + SQLite/vector adapter; similarity retrieval that states *why* each episode was judged relevant (CogA §3 stage 3); `ContextAssembler` v1 fanning out to Knowledge + Episodic (Semantic slot present but stubbed until Phase 12) into one typed bundle; episode export/delete (EC §5 — user data control from the first record).
 - **Exit criteria:** Analyzing a chart similar to a past episode surfaces that episode with its outcome and relevance reason inside the agents' context; `ContextAssembler` is the single read-side entry point agents use.
 - **Complexity:** M.
@@ -115,7 +131,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** Agent quality becomes measurable and regression-protected.
 - **Why it exists:** CA §21 makes agent-roster expansion conditional on *measured* improvement; prompts and models can't be changed safely without regression detection; and "the system improves" is otherwise vibes, which CC §1 forbids.
-- **Dependencies:** Phase 2 (agents to evaluate); Phases 4–5 make eval scenarios realistic.
+- **Dependencies:** Phase 2B (agents to evaluate); Phases 4–5 make eval scenarios realistic.
 - **Deliverables:** Eval harness under `tests/evals/` (runnable locally and on-demand in CI — not per-commit, for cost); golden-dataset format (chart + context + expected analysis judgments, labeled by the user — their judgment is the ground truth); first small datasets (~10–20 scenarios per live agent role); scoring rubrics (structural validity, doctrine grounding, agreement with labeled judgment); a committed baseline scorecard.
 - **Exit criteria:** Perturbing a prompt produces a visible score change (the harness demonstrably detects regressions); a baseline exists for every live agent; the labeling workflow is documented with its user-time cost stated honestly.
 - **Complexity:** M–L.
@@ -126,7 +142,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** Run the fast loop against historical data *as of* a past moment, with zero lookahead, at volume.
 - **Why it exists:** Validates the pipeline against history before real capital attention is at stake; generates decision volume for calibration far faster than live usage; the `ClockPort` discipline (Standing Rule 7) exists precisely for this payoff.
-- **Dependencies:** Phases 2, 6 (scored runs).
+- **Dependencies:** Phases 2B, 6 (scored runs).
 - **Deliverables:** `ReplayClock`; the first real `MarketDataProviderPort` adapter (historical OHLC; vendor and first instrument — the CA §22 deferred decision — chosen in this phase's planning pass); as-of data-access enforcement (nothing after time T reachable, tested); replay harness driving analyses across a date range; benchmark report presenting process-quality metrics and outcome statistics with honest caveats (CC §3: outcome ≠ process); `dolmir backtest run/report`.
 - **Exit criteria:** A multi-week historical replay completes; a deliberately-introduced lookahead bug is caught by the enforcement tests; the benchmark report renders both process and outcome views.
 - **Complexity:** L.
@@ -159,7 +175,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** Grow from four agents toward the full specialist society *where measurement justifies each addition*, and give the market side its persistent world model.
 - **Why it exists:** The twelve-agent roster is a hypothesis, not a spec (CA §21) — now testable with Phase 6/7 machinery. The `InstrumentWorldModel` (CogA §8) makes market understanding persist between analyses instead of restarting each time.
-- **Dependencies:** Phases 6, 7 (measurement); 2.
+- **Dependencies:** Phases 6, 7 (measurement); 2A/2B.
 - **Deliverables:** Specialist splits (e.g., Liquidity Specialist, ICT/SMC split, Macro Analyst, Statistician-as-narrator) each A/B-validated against the combined baseline through the eval + backtest harness; debate v2 (opinions argue for/against the shared hypothesis set — CogA §3 stage 6); `InstrumentWorldModel` persistence with recency weighting and a fast-loop update stage; per-role model selection exercised for real (cheap models on mechanical detection roles).
 - **Exit criteria:** Each added specialist shows measured improvement over the combined baseline — or is explicitly *not* added, with the comparison documented; the honest negative outcome is an allowed result. The world model visibly carries state between analyses ("this level was swept two sessions ago; it is no longer live").
 - **Complexity:** L.
@@ -170,11 +186,11 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** A second LLM provider runs behind the same port; swappability becomes a tested fact rather than a law on paper.
 - **Why it exists:** EC §4 is a Constitution law; until two providers pass one shared contract suite, it's an aspiration. Also the 10-year hedge against a shifting model landscape.
-- **Dependencies:** Phase 2 (port + contract-suite template); Phase 6 (quality comparison).
+- **Dependencies:** Phase 2B (port + contract-suite template); Phase 6 (quality comparison).
 - **Deliverables:** Second adapter (OpenAI/Gemini/DeepSeek — chosen at phase planning by capability/cost); the shared contract suite green on both; per-role provider swap via config demonstrated — same chart, same doctrine citations (RAG keeps doctrine provider-stable, CA §12); cost/latency/quality comparison report via the eval harness.
 - **Exit criteria:** Swapping the Chief Decision Agent's provider through config alone produces a valid, doctrine-grounded analysis; contract suite green on both providers in CI (cassettes).
 - **Complexity:** S–M.
-- **Risks:** Capability asymmetry between providers (vision/structured-output support differ — the `supports_*` capability flags from Phase 2 exist for this); prompt portability is measured via evals, not assumed.
+- **Risks:** Capability asymmetry between providers (vision/structured-output support differ — the `supports_*` capability flags from Phase 2B exist for this); prompt portability is measured via evals, not assumed.
 - **Future impact:** Model-landscape resilience, made real and continuously verified.
 
 ## Phase 12 — Semantic Memory, Consolidation & the Bias Ledger ⏳
@@ -203,7 +219,7 @@ The ⏳ phases' *machinery* ships on schedule; their *meaning* accumulates while
 
 - **Objective:** A REST API exposing the same use cases the CLI has proven: analyze, journal, traces, calibration, profile.
 - **Why it exists (and why now, not earlier):** Delivery adapters call use cases (EC §8, CA §3); letting the CLI stabilize the use-case layer first means the API is a thin adapter rather than a redesign. It unblocks any future UI with zero core work.
-- **Dependencies:** Use cases stable (Phases 2, 3, 5, 8, 9).
+- **Dependencies:** Use cases stable (Phases 2B, 3, 5, 8, 9).
 - **Deliverables:** API delivery adapter (framework chosen at phase planning; FastAPI the likely default); single-user local auth story (token); OpenAPI schema; CLI/API parity tests; a second composition root reusing the same wiring pattern (CA §19 pays off visibly).
 - **Exit criteria:** Every CLI workflow achievable via the API; OpenAPI docs render; parity tested; **zero changes to engine or orchestration code** to add it — Open/Closed demonstrated at the delivery level.
 - **Complexity:** M.
@@ -240,7 +256,7 @@ V1.0 is tagged when, and only when:
 - **Testing** — every phase ships its own tests; CI is the merge gate (CA §18). Phase 6 adds the *evaluation* layer, which is a different mechanism from tests (agent quality vs. code correctness).
 - **Documentation** — every phase updates the docs and ADRs it touches; Phase 15 finishes and audits the set. The foundation doc is amended (never silently) if implementation reality contradicts it.
 - **Security & privacy** — every phase touching personal data re-checks the EC §9 laws (local-first, no plaintext leaks, export/delete, audit trail); not a final-phase checklist.
-- **Cost tracking** — every LLM call is instrumented from Phase 2's first call; each phase review looks at the cost curve.
+- **Cost tracking** — every LLM call is instrumented from Phase 2B's first call; each phase review looks at the cost curve.
 
 Why not phases: a trailing "testing/documentation phase" is the standard way those things quietly don't happen. Embedding them in every phase's exit criteria makes them non-skippable.
 
@@ -251,22 +267,22 @@ Every subsystem from the project brief, mapped to where it's built:
 | Subsystem | Phase(s) |
 |---|---|
 | Kernel | 1 (born), 15 (migrations exercised) |
-| Orchestration | 2 (graph executor), 10 (debate v2), 13 (versioned strategies) |
-| Market Engine | 2 (first analyst), 7 (historical data), 10 (InstrumentWorldModel) |
+| Orchestration | 2A (reasoning engine), 10 (debate v2), 13 (versioned strategies) |
+| Market Engine | 2B (first analyst), 7 (historical data), 10 (InstrumentWorldModel) |
 | Knowledge Engine | 4 |
 | Trader Engine | 9 |
 | Memory Engine | 5 (episodic), 12 (semantic + consolidation) |
 | Journal Engine | 3 |
-| Risk Engine | 2 (Risk Gate), 8 (calibration inputs), 9 (psychology modulation) |
-| Provider Layer | 2 (pattern + first adapter), 11 (independence proven) |
-| Vision | 2 (chart extraction), 10 (maturation with specialists) |
-| LLM Integration | 2, 11 |
+| Risk Engine | 2B (Risk Gate), 8 (calibration inputs), 9 (psychology modulation) |
+| Provider Layer | 2B (pattern + first adapter), 11 (independence proven) |
+| Vision | 2B (chart extraction), 10 (maturation with specialists) |
+| LLM Integration | 2B, 11 |
 | Knowledge Base (content) | 4, then continuously grown |
-| Multi-Agent Society | 2 (seed of four), 10 (evidence-gated expansion) |
+| Multi-Agent Society | 2A (debate/decision mechanics), 2B (live seed of four), 10 (evidence-gated expansion) |
 | Learning System | 8, 12, 13 |
 | Calibration System | 8 (record), 12 (Bias Ledger) |
 | Cognitive Improvement | 13 |
-| CLI | 1 (doctor), then grows every phase (2, 3, 4, 7, 8, 9, 12, 13) |
+| CLI | 1 (doctor), then grows every phase (2B, 3, 4, 7, 8, 9, 12, 13) |
 | API | 14 |
 | Testing | every phase (cross-cutting) + 6 (evals) |
 | Benchmarking | 7 |
