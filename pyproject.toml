@@ -1,0 +1,285 @@
+#
+# DOLMIR — project manifest.
+#
+# Canonical design reference: Docs/architecture/DOLMIR_FOUNDATION.md
+# Execution plan:             Docs/ROADMAP.md
+#
+# Architectural enforcement lives at the bottom of this file under
+# [tool.importlinter]. Those contracts are law (Engineering Constitution §3),
+# run in CI on every push: a dependency-rule violation is a failing build,
+# not a code-review comment.
+#
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dolmir"
+version = "0.1.0"
+description = "DOLMIR — an AI-native Trader Operating System. Models the market and the trader, explains every conclusion, and learns over years."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "DOLMIR Project" }]
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.13",
+    "ruff>=0.5",
+    "import-linter>=2.0",
+]
+
+[project.scripts]
+dolmir = "dolmir.delivery.cli.main:entrypoint"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dolmir"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+# ---------------------------------------------------------------------------
+# mypy — strict everywhere; the type system is part of the architecture.
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+show_error_codes = true
+
+# ---------------------------------------------------------------------------
+# ruff — single tool for formatting and linting.
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "A",    # builtins shadowing
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "TID",  # tidy imports (no relative-import escapes)
+    "RUF",  # ruff-specific
+    "D",    # pydocstyle — public API is documented, by policy
+    "PL",   # pylint subset
+    "PT",   # pytest style
+]
+ignore = [
+    "D203", # incompatible with D211 (blank line before class docstring)
+    "D213", # incompatible with D212 (multi-line summary position)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests document themselves through their names and assertions.
+"tests/**" = ["D", "PLR2004"]
+
+# ---------------------------------------------------------------------------
+# import-linter — the architecture, enforced (EC §3, CA §3.1/§3.2).
+#
+# The engine dependency graph these contracts encode is CA §3.2:
+#   market, journal, knowledge  -> leaves (import no other engine)
+#   risk    -> journal only
+#   memory  -> journal only
+#   trader  -> journal + memory only
+#   nothing imports orchestration except delivery
+#   kernel imports nothing from dolmir outside kernel
+#   providers import only kernel
+#
+# Engines MAY import provider port modules (CA §4). TODO (later phase, once
+# real adapters exist): tighten provider imports to port modules only, so an
+# engine cannot import a concrete vendor adapter directly.
+# ---------------------------------------------------------------------------
+
+[tool.importlinter]
+root_packages = ["dolmir"]
+
+[[tool.importlinter.contracts]]
+name = "Kernel is self-contained (imports nothing from the rest of dolmir)"
+type = "forbidden"
+source_modules = ["dolmir.kernel"]
+forbidden_modules = [
+    "dolmir.orchestration",
+    "dolmir.engines",
+    "dolmir.providers",
+    "dolmir.delivery",
+]
+
+[[tool.importlinter.contracts]]
+name = "Providers depend on kernel only"
+type = "forbidden"
+source_modules = ["dolmir.providers"]
+forbidden_modules = [
+    "dolmir.orchestration",
+    "dolmir.engines",
+    "dolmir.delivery",
+]
+
+[[tool.importlinter.contracts]]
+name = "Nothing imports delivery"
+type = "forbidden"
+source_modules = [
+    "dolmir.kernel",
+    "dolmir.orchestration",
+    "dolmir.engines",
+    "dolmir.providers",
+]
+forbidden_modules = ["dolmir.delivery"]
+
+[[tool.importlinter.contracts]]
+name = "Engines never import orchestration"
+type = "forbidden"
+source_modules = ["dolmir.engines"]
+forbidden_modules = ["dolmir.orchestration"]
+
+[[tool.importlinter.contracts]]
+name = "Engine graph: market_engine is a leaf"
+type = "forbidden"
+source_modules = ["dolmir.engines.market_engine"]
+forbidden_modules = [
+    "dolmir.engines.journal_engine",
+    "dolmir.engines.risk_engine",
+    "dolmir.engines.memory_engine",
+    "dolmir.engines.knowledge_engine",
+    "dolmir.engines.trader_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "Engine graph: journal_engine is a leaf"
+type = "forbidden"
+source_modules = ["dolmir.engines.journal_engine"]
+forbidden_modules = [
+    "dolmir.engines.market_engine",
+    "dolmir.engines.risk_engine",
+    "dolmir.engines.memory_engine",
+    "dolmir.engines.knowledge_engine",
+    "dolmir.engines.trader_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "Engine graph: knowledge_engine is a leaf"
+type = "forbidden"
+source_modules = ["dolmir.engines.knowledge_engine"]
+forbidden_modules = [
+    "dolmir.engines.market_engine",
+    "dolmir.engines.journal_engine",
+    "dolmir.engines.risk_engine",
+    "dolmir.engines.memory_engine",
+    "dolmir.engines.trader_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "Engine graph: risk_engine reads journal only"
+type = "forbidden"
+source_modules = ["dolmir.engines.risk_engine"]
+forbidden_modules = [
+    "dolmir.engines.market_engine",
+    "dolmir.engines.memory_engine",
+    "dolmir.engines.knowledge_engine",
+    "dolmir.engines.trader_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "Engine graph: memory_engine reads journal only"
+type = "forbidden"
+source_modules = ["dolmir.engines.memory_engine"]
+forbidden_modules = [
+    "dolmir.engines.market_engine",
+    "dolmir.engines.risk_engine",
+    "dolmir.engines.knowledge_engine",
+    "dolmir.engines.trader_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "Engine graph: trader_engine reads journal and memory only"
+type = "forbidden"
+source_modules = ["dolmir.engines.trader_engine"]
+forbidden_modules = [
+    "dolmir.engines.market_engine",
+    "dolmir.engines.risk_engine",
+    "dolmir.engines.knowledge_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "market_engine internal layers (adapters -> application -> domain)"
+type = "layers"
+layers = [
+    "dolmir.engines.market_engine.adapters",
+    "dolmir.engines.market_engine.application",
+    "dolmir.engines.market_engine.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "journal_engine internal layers (adapters -> application -> domain)"
+type = "layers"
+layers = [
+    "dolmir.engines.journal_engine.adapters",
+    "dolmir.engines.journal_engine.application",
+    "dolmir.engines.journal_engine.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "risk_engine internal layers (adapters -> application -> domain)"
+type = "layers"
+layers = [
+    "dolmir.engines.risk_engine.adapters",
+    "dolmir.engines.risk_engine.application",
+    "dolmir.engines.risk_engine.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "memory_engine internal layers (adapters -> application -> domain)"
+type = "layers"
+layers = [
+    "dolmir.engines.memory_engine.adapters",
+    "dolmir.engines.memory_engine.application",
+    "dolmir.engines.memory_engine.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "knowledge_engine internal layers (adapters -> application -> domain)"
+type = "layers"
+layers = [
+    "dolmir.engines.knowledge_engine.adapters",
+    "dolmir.engines.knowledge_engine.application",
+    "dolmir.engines.knowledge_engine.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "trader_engine internal layers (adapters -> application -> domain)"
+type = "layers"
+layers = [
+    "dolmir.engines.trader_engine.adapters",
+    "dolmir.engines.trader_engine.application",
+    "dolmir.engines.trader_engine.domain",
+]
