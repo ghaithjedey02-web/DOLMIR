@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets — never committed (Engineering Constitution §9)
+.env
+.env.*
+!.env.example
+
+# Local data (SQLite databases, vector indexes) — user data stays local
+*.sqlite3
+*.db
+
+# OS noise
+.DS_Store
