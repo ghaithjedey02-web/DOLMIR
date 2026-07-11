@@ -21,7 +21,9 @@ from dolmir.orchestration.trace.challenge import FalsificationReport
 from dolmir.orchestration.trace.conclusion import Conclusion
 from dolmir.orchestration.trace.confidence import ConfidenceReport
 from dolmir.orchestration.trace.hypothesis import HypothesisSet
+from dolmir.orchestration.trace.observation import Interpretation, ObservationSet
 from dolmir.orchestration.trace.opinion import AgentOpinion
+from dolmir.orchestration.trace.reflection import Reflection
 from dolmir.orchestration.trace.synthesis import synthesize_confidence
 
 __all__ = [
@@ -29,6 +31,8 @@ __all__ = [
     "ConfidenceSynthesisNode",
     "DeliberationNode",
     "FalsificationNode",
+    "InterpretationNode",
+    "ReflectionNode",
 ]
 
 
@@ -231,3 +235,100 @@ class ChiefDecisionNode:
                 ),
             )
         )
+
+
+class InterpretationNode(abc.ABC):
+    """The perception-to-understanding stage (CogA §3 stage 2).
+
+    Reads the seeded ``ObservationSet`` and produces an ``Interpretation``
+    — labeled claims with provenance back to the observations they read.
+    Aborts on failure: a run that cannot understand its inputs must not
+    quietly hypothesize over nothing.
+    """
+
+    @property
+    def name(self) -> str:
+        """Node name."""
+        return "interpretation"
+
+    @property
+    def requires(self) -> frozenset[type[object]]:
+        """The run's observations."""
+        return frozenset({ObservationSet})
+
+    @property
+    def produces(self) -> frozenset[type[object]]:
+        """Labeled claims with observation provenance."""
+        return frozenset({Interpretation})
+
+    @property
+    def failure_policy(self) -> FailurePolicy:
+        """No understanding, no reasoning: failure aborts."""
+        return FailurePolicy.ABORT_RUN
+
+    async def run(self, context: GraphContext) -> Result[NodeReport, NodeFailure]:
+        """Interpret and wrap the result."""
+        match await self.interpret(context):
+            case Ok(interpretation):
+                return Ok(
+                    NodeReport(
+                        artifacts=(interpretation,),
+                        summary=f"derived {len(interpretation.claims)} claim(s) "
+                        f"from {len(interpretation.interpreted_from)} observation(s)",
+                    )
+                )
+            case Err(failure):
+                return Err(failure)
+
+    @abc.abstractmethod
+    async def interpret(self, context: GraphContext) -> Result[Interpretation, NodeFailure]:
+        """Label what the observations mean, with epistemic honesty (CC §8)."""
+
+
+class ReflectionNode(abc.ABC):
+    """The pre-outcome reflection stage (CogA §3 stage 12).
+
+    Runs after the conclusion exists and locks in the pre-registered
+    falsification condition plus open uncertainties, so the slow loop can
+    later grade reality against a commitment (CC §4). Failure policy is
+    ``CONTINUE``: a failed reflection degrades the record loudly but does
+    not retract a decision already made — the trace shows the gap.
+    """
+
+    @property
+    def name(self) -> str:
+        """Node name."""
+        return "reflection"
+
+    @property
+    def requires(self) -> frozenset[type[object]]:
+        """The run's conclusion."""
+        return frozenset({Conclusion})
+
+    @property
+    def produces(self) -> frozenset[type[object]]:
+        """The locked-in pre-outcome reflection."""
+        return frozenset({Reflection})
+
+    @property
+    def failure_policy(self) -> FailurePolicy:
+        """Reflection degrades the record; it does not retract decisions."""
+        return FailurePolicy.CONTINUE
+
+    async def run(self, context: GraphContext) -> Result[NodeReport, NodeFailure]:
+        """Reflect and wrap the result."""
+        match await self.reflect(context):
+            case Ok(reflection):
+                return Ok(
+                    NodeReport(
+                        artifacts=(reflection,),
+                        summary="locked in falsification condition and "
+                        f"{len(reflection.open_uncertainties)} open uncertainty(ies)",
+                    )
+                )
+            case Err(failure):
+                return Err(failure)
+
+    @abc.abstractmethod
+    async def reflect(self, context: GraphContext) -> Result[Reflection, NodeFailure]:
+        """State implications and lock in the falsification condition."""

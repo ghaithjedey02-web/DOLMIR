@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from dolmir.orchestration.trace.challenge import Challenge
 from dolmir.orchestration.trace.confidence import ConfidenceAssessment
 from dolmir.orchestration.trace.hypothesis import Hypothesis
+from dolmir.orchestration.trace.uncertainty import Uncertainty
 
 __all__ = ["Conclusion"]
 
@@ -24,13 +25,16 @@ class Conclusion:
     Carries the chosen hypothesis itself (not just an id) so the conclusion
     is self-contained for explanation and persistence; ``standing_challenges``
     are the unresolved objections against the choice, acknowledged rather
-    than hidden (CC §11: dissent is part of the explanation).
+    than hidden (CC §11: dissent is part of the explanation);
+    ``open_uncertainties`` name what remains genuinely unknown, split by
+    reducibility (CogA §5) — never blended into the confidence level.
     """
 
     chosen: Hypothesis
     confidence: ConfidenceAssessment
     rationale: str
     standing_challenges: tuple[Challenge, ...] = field(default=())
+    open_uncertainties: tuple[Uncertainty, ...] = field(default=())
 
     def __post_init__(self) -> None:
         """Enforce coherence between the choice and its metadata."""

@@ -65,6 +65,11 @@ def _dissent_section(conclusion: Conclusion, opinions: tuple[AgentOpinion, ...])
             )
     for challenge in conclusion.standing_challenges:
         parts.append(f"unresolved {challenge.severity.value} challenge: {challenge.objection}")
+    for uncertainty in conclusion.open_uncertainties:
+        line = f"open {uncertainty.kind.value} uncertainty: {uncertainty.description}"
+        if uncertainty.resolution is not None:
+            line += f" (resolves when: {uncertainty.resolution})"
+        parts.append(line)
     if not parts:
         return "None recorded — no opposing stance or standing challenge against the choice."
     return "\n".join(f"  - {part}" for part in parts)

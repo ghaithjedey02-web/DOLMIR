@@ -15,6 +15,8 @@ from dolmir.orchestration.agents.stages import (
     ConfidenceSynthesisNode,
     DeliberationNode,
     FalsificationNode,
+    InterpretationNode,
+    ReflectionNode,
 )
 
 __all__ = [
@@ -24,4 +26,6 @@ __all__ = [
     "DeliberationNode",
     "DeterministicChiefDecision",
     "FalsificationNode",
+    "InterpretationNode",
+    "ReflectionNode",
 ]
