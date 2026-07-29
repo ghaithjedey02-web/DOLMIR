@@ -1,0 +1,55 @@
+[
+  {
+    "match": "PING_SUCCESS",
+    "status_code": 200,
+    "body": {
+      "id": "msg_01XReasoningKernel",
+      "type": "message",
+      "role": "assistant",
+      "model": "claude-sonnet-4-5",
+      "content": [
+        { "type": "text", "text": "pong: the reasoning kernel is reachable." }
+      ],
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "usage": { "input_tokens": 1280, "output_tokens": 24 }
+    }
+  },
+  {
+    "match": "PING_MULTIBLOCK",
+    "status_code": 200,
+    "body": {
+      "id": "msg_02MultiBlock",
+      "type": "message",
+      "role": "assistant",
+      "model": "claude-sonnet-4-5",
+      "content": [
+        { "type": "text", "text": "first. " },
+        { "type": "text", "text": "second." }
+      ],
+      "stop_reason": "end_turn",
+      "usage": { "input_tokens": 40, "output_tokens": 8 }
+    }
+  },
+  {
+    "match": "PING_AUTH_FAIL",
+    "status_code": 401,
+    "body": {
+      "type": "error",
+      "error": { "type": "authentication_error", "message": "invalid x-api-key" }
+    }
+  },
+  {
+    "match": "PING_RATE_LIMIT",
+    "status_code": 429,
+    "body": {
+      "type": "error",
+      "error": { "type": "rate_limit_error", "message": "number of requests has exceeded your rate limit" }
+    }
+  },
+  {
+    "match": "PING_MALFORMED",
+    "status_code": 200,
+    "body": { "id": "msg_03Malformed", "type": "message", "role": "assistant", "content": [] }
+  }
+]
