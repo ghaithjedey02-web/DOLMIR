@@ -24,7 +24,7 @@ from dolmir.kernel.shared_kernel import EntityId
 
 __all__ = ["JsonValue", "to_document"]
 
-type JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+type JsonValue = str | int | float | bool | list["JsonValue"] | dict[str, "JsonValue"] | None
 
 
 def to_document(obj: object) -> JsonValue:  # noqa: PLR0911 — a type dispatcher is clearest with one return per handled type

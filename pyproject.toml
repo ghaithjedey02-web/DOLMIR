@@ -73,6 +73,11 @@ show_error_codes = true
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+# Ruff (>=0.16) formats Python code blocks inside Markdown by default. The
+# design docs' illustrative snippets are hand-written for readability and the
+# Foundation document is frozen — ruff must not rewrite them. Restrict ruff to
+# Python sources only.
+extend-exclude = ["**/*.md"]
 
 [tool.ruff.lint]
 select = [
