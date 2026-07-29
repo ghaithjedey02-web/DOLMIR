@@ -1,0 +1,42 @@
+# DOLMIR CI — the merge gate (Engineering Constitution §10: CI is the actual
+# gate, not a README promise). The lint-imports step enforces the
+# architecture itself: a dependency-rule violation is a failing build.
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  quality:
+    name: lint, types, architecture, tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package with dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy (strict)
+        run: mypy
+
+      - name: Architecture contracts (import-linter)
+        run: lint-imports
+
+      - name: Unit tests
+        run: pytest
