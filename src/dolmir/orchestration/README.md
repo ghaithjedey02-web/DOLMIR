@@ -1,11 +1,33 @@
 # The Cognitive Kernel — concept-to-code map
 
 This package is DOLMIR's universal reasoning framework (Roadmap Phase 2A +
-Amendment 2). It is **domain-agnostic by construction**: nothing in it
+Amendments 2–3). It is **domain-agnostic by construction**: nothing in it
 knows what trading, medicine, or robotics is — domains arrive as seeded
 artifact types and specialist node implementations. Constitutional rules
 are constructor rules: the illegal states below are unconstructible, not
 discouraged.
+
+## Sprint 2 vocabulary → frozen Foundation names
+
+The Reasoning Kernel is the frozen **typed graph** engine (Core
+Architecture §8: "an explicit directed graph of typed nodes executed by a
+graph executor — *not a hardcoded linear function*"). Sprint 2's requested
+names map onto it one-for-one; the engine is **not** re-implemented under a
+second, linear-pipeline vocabulary (that would fork the frozen
+architecture):
+
+| Sprint 2 name | Frozen kernel home |
+|---|---|
+| PipelineExecutor | `graph.GraphExecutor` |
+| PipelineStage interface | `graph.GraphNode` (+ the `agents.*Node` stage bases) |
+| StageResult | `graph.NodeReport` |
+| StageFailure | `failure.NodeFailure` |
+| PipelineTrace | `trace.ReasoningTrace` |
+| CognitiveContext | `graph.GraphContext` (the live run state) |
+| ConfidenceAccumulator | `trace.ConfidenceReport` + `trace.synthesize_confidence` (pure, Standing Rule 4 — not mutable accumulation) |
+| **ReasoningSession** | `session.ReasoningSession` — the run entry point (new) |
+| **CognitiveState** | `session.CognitiveState` — the immutable outcome snapshot (new) |
+| Hypothesis / Decision / Reflection | `trace.Hypothesis` / `trace.Decision` / `trace.Reflection` |
 
 ## Every cognitive concept, and where it lives
 
@@ -35,27 +57,42 @@ discouraged.
 | Reasoning Trace | `trace.record.ReasoningTrace` | `schema_version` from the first record (Standing Rule 6); every step recorded, including failures and skips |
 | Serialization | `trace.serialization.to_document` | every object → JSON; unknown types fail loudly |
 
-## The pipeline, stage by stage
+## The fast-loop pipeline, stage by stage (CogA §3)
+
+Every stage is a `GraphNode`; each has a reusable abstract base in
+`agents.stages` whose subclass supplies the judgment. The executor derives
+the ordering below from the artifact *types* the nodes declare — stages
+never name each other.
 
 ```
-Observation          seeded ObservationSet
-Interpretation       agents.InterpretationNode        → Interpretation
-Context building     graph.GraphContext (+ ContextAssembler, Phase 5)
-Hypothesis gen.      domain node                      → HypothesisSet
-Internal debate      N × agents.DeliberationNode      → AgentOpinion (accumulating)
-Critical analysis    agents.FalsificationNode         → FalsificationReport
-Confidence synth.    agents.ConfidenceSynthesisNode   → ConfidenceReport   (deterministic)
-Decision             agents.ChiefDecisionNode         → Conclusion; domain gates → Decision
-Explanation          trace.build_explanation          → Explanation        (deterministic)
-Reflection           agents.ReflectionNode            → Reflection
-Learning             slow loop (Phase 8)              → LearningSignal
+ 1 Perception          agents.PerceptionNode            → ObservationSet
+ 2 Understanding       agents.InterpretationNode        → Interpretation
+ 3 Context Building    agents.ContextBuildingNode       → AssembledContext
+ 4 World Model Update  agents.WorldModelUpdateNode      → WorldModel
+ 5 Hypothesis Gen.     agents.HypothesisGenerationNode  → HypothesisSet
+ 6 Internal Debate     N × agents.DeliberationNode      → AgentOpinion (accumulating)
+ 7 Critical Thinking   agents.FalsificationNode         → FalsificationReport
+ 8 Confidence Synth.   agents.ConfidenceSynthesisNode   → ConfidenceReport   (deterministic)
+ 9 Risk Evaluation     agents.RiskEvaluationNode        → RiskAssessment
+10 Decision            agents.ChiefDecisionNode         → Conclusion
+                       agents.DecisionNode              → Decision           (risk-gated)
+11 Explanation         session.ReasoningSession         → Explanation        (from the finished trace)
+12 Immediate Reflect.  agents.ReflectionNode            → Reflection
 ```
 
-The executor (`graph.GraphExecutor`) derives this ordering from the types
-nodes declare — stages never name each other. The constitutional gate at
-assembly: any node producing `Conclusion` must require
-`FalsificationReport` and `ConfidenceReport`, so a deciding graph that
-skips self-critique cannot exist.
+**Running it:** `session.ReasoningSession.run(graph, seeds=…)` executes the
+assembled graph, persists the complete `ReasoningTrace`, renders the
+`Explanation` from the finished trace (stage 11 — it needs the whole
+trace, so it is a session step, not an in-graph node), and returns an
+immutable `CognitiveState`.
+
+**Slow Learning Loop:** placeholder only. The `LearningSignal` shape
+exists; the stages that *produce* it require real outcomes and arrive in
+Phase 8. There is intentionally no `LearningNode` yet.
+
+The constitutional gate at assembly: any node producing `Conclusion` must
+require `FalsificationReport` and `ConfidenceReport`, so a deciding graph
+that skips self-critique cannot be assembled at all.
 
 ## Deliberate non-abstractions
 

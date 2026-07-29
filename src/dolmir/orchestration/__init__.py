@@ -15,8 +15,10 @@ Sub-packages:
   tags), Hypothesis (pre-registered falsification), AgentOpinion,
   Challenge, Confidence, Conclusion, ReasoningTrace + repository port,
   Explanation.
-- ``agents``  — stage-node toolkit + ChiefDecisionPort with the
-  deterministic reference synthesizer.
+- ``agents``  — stage-node toolkit (one base per fast-loop stage) +
+  ChiefDecisionPort with the deterministic reference synthesizer.
+- ``session`` — ReasoningSession orchestration entry point + the immutable
+  CognitiveState outcome snapshot.
 - ``context`` — reserved for the ContextAssembler (Phase 5).
 """
 

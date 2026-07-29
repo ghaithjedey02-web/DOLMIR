@@ -23,6 +23,7 @@ from dolmir.orchestration.trace.confidence import (
     ConfidenceAssessment,
     ConfidenceReport,
 )
+from dolmir.orchestration.trace.context import AssembledContext
 from dolmir.orchestration.trace.decision import (
     Decision,
     IdentifiedRisk,
@@ -64,6 +65,7 @@ from dolmir.orchestration.trace.uncertainty import Uncertainty, UncertaintyKind
 
 __all__ = [
     "AgentOpinion",
+    "AssembledContext",
     "Belief",
     "Challenge",
     "ChallengeSeverity",

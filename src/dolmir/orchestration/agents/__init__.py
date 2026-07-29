@@ -13,19 +13,31 @@ from dolmir.orchestration.agents.chief_decision import (
 from dolmir.orchestration.agents.stages import (
     ChiefDecisionNode,
     ConfidenceSynthesisNode,
+    ContextBuildingNode,
+    DecisionNode,
     DeliberationNode,
     FalsificationNode,
+    HypothesisGenerationNode,
     InterpretationNode,
+    PerceptionNode,
     ReflectionNode,
+    RiskEvaluationNode,
+    WorldModelUpdateNode,
 )
 
 __all__ = [
     "ChiefDecisionNode",
     "ChiefDecisionPort",
     "ConfidenceSynthesisNode",
+    "ContextBuildingNode",
+    "DecisionNode",
     "DeliberationNode",
     "DeterministicChiefDecision",
     "FalsificationNode",
+    "HypothesisGenerationNode",
     "InterpretationNode",
+    "PerceptionNode",
     "ReflectionNode",
+    "RiskEvaluationNode",
+    "WorldModelUpdateNode",
 ]

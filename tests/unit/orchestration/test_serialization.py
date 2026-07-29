@@ -7,10 +7,12 @@ import pytest
 
 from dolmir.kernel.shared_kernel import EntityId
 from dolmir.orchestration.failure import FailureKind, NodeFailure
+from dolmir.orchestration.session import CognitiveState
 from dolmir.orchestration.trace.belief import Belief, WorldModel
 from dolmir.orchestration.trace.challenge import Challenge, ChallengeSeverity
 from dolmir.orchestration.trace.conclusion import Conclusion
 from dolmir.orchestration.trace.confidence import Confidence, ConfidenceAssessment
+from dolmir.orchestration.trace.context import AssembledContext
 from dolmir.orchestration.trace.decision import (
     Decision,
     IdentifiedRisk,
@@ -77,6 +79,7 @@ def test_every_reasoning_object_serializes_to_json(
             interpreted_from=frozenset({observation.observation_id}),
         ),
         Evidence(kind=EvidenceKind.CITATION, source_ref="doc:1@v1", content="c"),
+        AssembledContext(items=(Claim(statement="doctrine", status=EpistemicStatus.ASSUMPTION),)),
         hypothesis_set,
         conclusion,
         Decision(
@@ -144,6 +147,22 @@ def test_full_trace_document_is_self_describing(moment: datetime) -> None:
     failure = first_step["failure"]
     assert isinstance(failure, dict)
     assert failure["kind"] == "external_error"
+
+
+def test_cognitive_state_snapshot_serializes(moment: datetime) -> None:
+    aborted = ReasoningTrace(
+        trace_id=EntityId.generate(),
+        started_at=moment,
+        completed_at=moment,
+        status=RunStatus.ABORTED,
+        seeded=(),
+        steps=(),
+        conclusion=None,
+    )
+    state = CognitiveState(trace=aborted, conclusion=None, decision=None, explanation=None)
+    document = _json_round_trips(state)
+    assert document["_type"] == "CognitiveState"
+    assert document["schema_version"] == 1
 
 
 def test_unknown_types_fail_loudly() -> None:
