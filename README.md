@@ -16,9 +16,14 @@ decision-maker.
 |---|---|
 | [`Docs/architecture/DOLMIR_FOUNDATION.md`](Docs/architecture/DOLMIR_FOUNDATION.md) | **The law of the project.** Engineering Constitution, Core Architecture, Cognitive Constitution, Cognitive Architecture. Every engineering decision must respect it. |
 | [`Docs/ROADMAP.md`](Docs/ROADMAP.md) | The official execution plan: 15 phases from kernel skeleton to V1.0. |
+| [`Docs/architecture/adr/`](Docs/architecture/adr/) | Architecture Decision Records — one file per major decision. |
 
-Current status: **Phase 1** (kernel skeleton, primitives, and architectural
-enforcement) — see the roadmap.
+Current status: **Phase 2B** — the first vertical slice: `dolmir analyze`
+runs one real, explainable trading analysis end-to-end (chart perception →
+ICT/SMC understanding → falsifiable hypotheses → agent debate → deterministic
+Risk Gate → explained, persisted decision) on the Phase 2A reasoning engine.
+See [ADR 0001](Docs/architecture/adr/0001-first-vertical-slice.md) and the
+roadmap.
 
 ## Quickstart
 
@@ -35,9 +40,27 @@ dolmir doctor      # boots the kernel with zero external infrastructure
 ruff check . && ruff format --check . && mypy && lint-imports && pytest
 ```
 
+### Analyzing a chart
+
+`analyze` needs a model (the reasoning engine and Risk Gate run offline, but
+the agents call an LLM). Supply a key, then point it at a chart image:
+
+```bash
+export DOLMIR_LLM__API_KEY=sk-ant-...      # your Anthropic key
+dolmir analyze --image path/to/chart.png   # perceive → reason → decide, and persist the trace
+dolmir trace show --id <trace-id>          # reconstruct the reasoning behind any past decision
+```
+
+Every analysis prints a trader-legible explanation, the risk-gated decision
+(including an honest "no clear edge" or a Risk-Gate veto), the per-run LLM
+cost, and a trace id. Without a key, `analyze` fails loudly and legibly; the
+whole pipeline is still exercised offline by the test suite (scripted
+providers and cassettes — no network, no key).
+
 Configuration comes from `DOLMIR_*` environment variables and an optional
-`.env` file (nested fields use `__`, e.g. `DOLMIR_PLUGINS__ENABLED`).
-Invalid configuration fails loudly at boot, by design.
+`.env` file (nested fields use `__`, e.g. `DOLMIR_PLUGINS__ENABLED`,
+`DOLMIR_LLM__MODEL`, `DOLMIR_RISK__MIN_REWARD_TO_RISK`). Secrets are env-var
+only. Invalid configuration fails loudly at boot, by design.
 
 ## Repository map
 

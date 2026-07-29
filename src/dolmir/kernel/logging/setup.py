@@ -41,5 +41,9 @@ def configure_logging(settings: DolmirSettings) -> None:
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, settings.log_level)),
-        cache_logger_on_first_use=True,
+        # Deliberately not caching loggers on first use: the micro-optimization
+        # is negligible for a local CLI, and a cached module-level logger bound
+        # under one configuration defeats ``structlog.testing.capture_logs`` in
+        # tests — observability of our own logs is worth more than the cache.
+        cache_logger_on_first_use=False,
     )
