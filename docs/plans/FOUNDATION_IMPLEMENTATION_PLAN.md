@@ -1,0 +1,285 @@
+# DOLMIR — Foundation Implementation Plan (Phase 0)
+
+**Status:** Proposed for review · **Date:** 2026-09-02 · **Repository:** `ghaithjedey02-web/DOLMIR`
+**Working branch:** `claude/dolmir-foundation-architecture-784tn2` (see Open Decision OD-1 on the branch name)
+
+Every material statement below carries one of three markers, as required by the Master Build Directive §28:
+
+- **[CONFIRMED]** — verified against the repository, a connected system, or a current document.
+- **[HYPOTHESIS]** — a reasoned position that needs the product owner's confirmation or real-world validation.
+- **[UNKNOWN]** — not determinable from the available evidence; stated rather than guessed.
+
+Source-of-truth priority applied throughout (Directive §25): Master Build Directive → current product documents (Notion "Dolmir — Business OS", "DOLMIR — Product Foundation", "Strategy", Solutions database, `prova_1/docs/strategy`) → current repository implementation → historical documents (Trader OS branch) → assumptions.
+
+---
+
+## A. Current repository state
+
+| Item | Finding | Marker |
+|---|---|---|
+| `main` | Two commits (2026-07-08). Two files: `README.md` ("# DOLMIR-os") and `Docs/REDME.md`. **Zero code, zero CI, zero configuration.** | [CONFIRMED] |
+| Branch `claude/dolmir-project-foundation-vlh863` | 11 commits (2026-07-09 → 2026-07-29). The **historical "AI-native Trader Operating System"** (Python 3.12, ICT/SMC, Risk Gate, trading agents). Open PR [#1](https://github.com/ghaithjedey02-web/DOLMIR/pull/1) targets `main`. Per Directive §0 it is **not** the current product: it is left untouched, not merged, not deleted. | [CONFIRMED] |
+| Branch `claude/dolmir-foundation-architecture-784tn2` | This session's branch. Did not exist on the remote at session start; created from `main`. | [CONFIRMED] |
+| Branch `claude/dolmir-platform-foundation` (named in Directive §24) | Does not exist. The execution harness bound this session to the branch above and forbids pushing elsewhere. **Discrepancy surfaced, not resolved silently** (OD-1). | [CONFIRMED] |
+| Tags, CI workflows on `main`, branch protection | No tags; no workflow on `main`. `main` is stated as protected by the directive; not verifiable with the tools available here. | [CONFIRMED] / [UNKNOWN] |
+| Sibling repository `ghaithjedey02-web/prova_1` | **The live product code and website.** TypeScript monorepo (npm workspaces): `apps/web` (Next.js 16, dolmir.com on Vercel), `packages/ai-core` (provider-agnostic AI layer, Anthropic + OpenAI-compatible + mock), `packages/rfq-engine` (Preventivo Rapido demo pipeline), `packages/workflows` (workflow definitions for the site's player), `packages/prospecting`, `docs/strategy`, `docs/architecture`. 58 commits, 2026-08-29 → 2026-09-02. Only branch: `claude/ai-implementation-foundation-px0gla` (production deploys from it; there is no `main`). | [CONFIRMED] |
+| Sibling repository `ghaithjedey02-web/DOLMIR-IA` | Empty (no commits). | [CONFIRMED] |
+| Website | `dolmir.com` / `www.dolmir.com` served by Vercel project `prova-1-web` (team "DOLMIR", framework Next.js, Node 24). Not part of this repository; **not touched by this plan.** | [CONFIRMED] |
+| Supabase | Organization "ghaith" exists. **Zero projects.** | [CONFIRMED] |
+| n8n | Connected via MCP. **Zero DOLMIR workflows.** | [CONFIRMED] |
+| Google Drive | Connector token expired; could not be searched for documents. | [CONFIRMED] |
+| "DOLMIR Master Technical Discovery & Build Plan" (Directive §25 priority 1) | **Not found** under that name in the repository, the sibling repositories, or Notion. The Master Build Directive itself is treated as that document. If it exists elsewhere (Drive), it must be surfaced. | [UNKNOWN] |
+| Build environment | Node 22.22, pnpm 10.33, npm 10.9, Python 3.11 (not 3.12), PostgreSQL 16 server available locally (cluster started for tests), **no Docker daemon**, no LLM API key, npm registry and PyPI reachable. | [CONFIRMED] |
+
+## B. Existing architecture
+
+Two prior architectures exist, neither of which is the Phase 0 platform:
+
+**B.1 Historical Trader OS (this repository, old branch)** — Python modular monolith with a strong engineering constitution: Clean Architecture per bounded context, import-linter contracts run in CI, `Result[T,E]`, `ClockPort`, fail-fast pydantic settings that reject unknown `DOLMIR_*` variables, structlog, an `LLMProviderPort` with an Anthropic adapter tested through recorded HTTP cassettes over an injected transport, cost/latency instrumentation as a decorator, an epistemic model (`FACT / OBSERVATION / ASSUMPTION / HYPOTHESIS`, aleatory vs epistemic uncertainty, ordered confidence vocabulary instead of fabricated percentages, structurally ungrounded facts unconstructible). Domain: trading. [CONFIRMED]
+
+**B.2 Current commercial code (`prova_1`)** — TypeScript. `ai-core` defines `AIProvider { complete, extract }` with model *tiers* (`fast | standard | deep`) instead of model names, per-field extraction results `{ value | null, confidence, evidence }`, an `AIClient` facade owning retry, EUR cost accumulation and PII-redacted logging; vendor SDKs only under `providers/`. `rfq-engine` implements the "Document-to-Decision pipeline": deterministic classify → LLM extract → confidence gate → deterministic triage → deterministic comparable retrieval → draft with explicit price refusal → human approval as terminal state. The public console (`anthropic-console.ts` + `demo-company.ts`) already models **typed tools**, a **human gate tool** and a **`declare_not_determined` tool** as the only way the model can say "I don't know". Its `docs/architecture/overview.md` (2026-08-29) explicitly defers database, auth, multi-tenancy, queue and observability "until a signed client needs one". No persistence, no tenancy, no audit, no ledger. [CONFIRMED]
+
+## C. What is reusable
+
+| Asset | Reuse mode | Rationale |
+|---|---|---|
+| Trader OS **design patterns**: Result type; fail-fast config rejecting unknown env vars; port + injected transport + recorded cassettes for provider contract tests; instrumentation decorator; epistemic status types; append-only repository ports; import contracts in CI | **Design only** (re-expressed in TypeScript) | Directive §0 forbids copying the trading application architecture or its Python code; the patterns are domain-agnostic and proven in that branch's own CI. [CONFIRMED] |
+| `prova_1/ai-core`: tiers-not-models, `{value, confidence, evidence}` extraction contract, redaction rules (email/phone/P.IVA/IBAN), cost accounting semantics, typed tools with human-gate and not-determined tools | **Design + selective code port** into the platform's AI layer | Same language; same product; already validated by 27 tests. Ported (copied and adapted), not imported across repositories. [CONFIRMED] |
+| `prova_1/rfq-engine`: classification signals, RFQ extraction schema in Italian shop vocabulary, confidence floors, triage rules, comparable scoring, refusal-to-price rule, Italian fixtures | **Domain input for the first vertical slice** (after Phase 0) | Encodes real domain knowledge for the beachhead workflow. Will be re-hosted on the ledger/tenant/evidence model rather than run as-is. [CONFIRMED] |
+| Notion "Product Foundation" core-model list (companies, people, customers, suppliers, documents, emails, orders/requests/offers, articles/materials, events/movements, rules, approvals, audit, decision/outcome memory, integrations) | **Canonical entity roadmap** | Directly informs the data-model plan (G) and the module map (F). [CONFIRMED] |
+| `prova_1/docs/strategy/08-risks-and-compliance.md` | **Security/compliance requirements** | GDPR processor role, sub-processor disclosure, EU AI Act classification, no high-risk use cases, per-client isolation of pricing logic. [CONFIRMED] |
+
+**Not reusable:** the trading domain (engines, agents, Risk Gate semantics, knowledge base), the website, the prospecting pipeline.
+
+## D. What must change
+
+1. This repository becomes the **platform repository**. `main` currently describes "DOLMIR-os" and holds a `Docs/` folder with a typo; the case-different `docs/` requested by the directive would break checkouts on case-insensitive filesystems, so `Docs/` is renamed to `docs/` (done in this branch). [CONFIRMED]
+2. The `prova_1` architecture rule "no database, no auth, no multi-tenancy until a signed client" and the Notion 90-day plan rule "do not build a database, a queue or a vector store" are **superseded by the directive** for this repository (contradiction C-4 below). The queue and vector store remain *not built*. [CONFIRMED]
+3. The historical branch's claim that `DOLMIR_FOUNDATION.md` is "the law of the project" is superseded: the Master Build Directive and current product documents are the law; the historical documents are archived context (contradiction C-3). [CONFIRMED]
+4. Model routing in `prova_1` pins every tier to `claude-opus-5`; the platform must make tier→model routing configuration with a conservative default and measurable cost (Directive §19). [CONFIRMED]
+
+## E. Target architecture
+
+**Shape:** modular monolith, one deployable API process, Clean Architecture inside every module, explicit constructor injection with a single composition root per delivery adapter, no DI framework, no microservices, no queue, no vector store in Phase 0. [CONFIRMED — Directive §4]
+
+**Runtime:** TypeScript on Node 22 LTS, pnpm workspaces. **Python is not banned:** it is reserved for future *bounded, stateless workers* (OCR/layout-heavy document processing, evaluation data science) reached through ports, introduced only when a concrete responsibility justifies a second runtime. Recorded in ADR-0002 with revisit triggers. Rationale: the current product code, the website, Supabase and Vercel tooling are all TypeScript; the LLM work in Phase 0 and the first slice is orchestration with structured outputs, which TypeScript handles as well as Python; the Trader OS Python code is explicitly not the current product; a future PWA shares types end-to-end. [HYPOTHESIS — strongly supported by repository evidence; the product owner may veto before implementation proceeds]
+
+**The four architectural laws (Directive §3) mapped to mechanisms:**
+
+| Law | Mechanism |
+|---|---|
+| Event ledger | `ledger_events` append-only table (UPDATE/DELETE revoked from the application role and blocked by trigger), per-stream optimistic concurrency, mandatory provenance, projections rebuilt from events with checkpoints. No mutable "truth" rows for operational facts. |
+| LLM boundary | LLMs are reached only through `LlmProviderPort`; they return typed, Zod-validated structured output; they never receive a database handle. Any side effect happens through **typed tools** with input/output schemas, a permission requirement, audit recording and deterministic handlers. Numbers, dates, totals and thresholds are computed in code. |
+| Tenant isolation | Every tenant table carries `organization_id`; **PostgreSQL RLS is enabled and forced**; the API connects as a role that cannot bypass RLS and is not the table owner; the tenant is set per transaction (`set_config('dolmir.tenant_id', …, true)`); a transaction without a tenant sees nothing and can write nothing. Tested. |
+| Canonical connectors | Domain and application code depend only on ports (`LlmProviderPort`, `ObjectStoragePort`, `AuthenticationPort`, later `EmailAdapter`, `ErpAdapter`, `DocumentTextExtractorPort`). Vendor SDKs live only in adapter folders; dependency-cruiser fails CI on any other import. |
+
+**Cross-cutting:** structured logging (pino) with PII redaction; request/correlation ids on every log line, audit row and ledger event; RFC 9457 problem-details errors; health/readiness endpoints; AI usage ledger from the first call.
+
+## F. Folder / module structure
+
+```
+DOLMIR/
+├── apps/
+│   └── api/                              Delivery: Fastify HTTP server, CLI (migrate, doctor, dev-token),
+│       └── src/                          composition root. The ONLY place process.env is read.
+│           ├── main.ts
+│           ├── composition/              wiring of adapters → use cases → routes
+│           ├── http/                     server, plugins (request-id, auth, tenant, errors), routes
+│           └── cli/
+├── packages/
+│   └── core/                             The modular monolith. No HTTP, no process.env, no vendor SDKs
+│       └── src/                          outside adapters/.
+│           ├── kernel/                   Result, DomainError hierarchy, branded ids, ClockPort,
+│           │                             epistemic types (EpistemicStatus, Evidence, Claim),
+│           │                             NonDeterminato, schema-version helpers, redaction
+│           ├── modules/
+│           │   ├── tenancy/              organizations, users, memberships, TenantContext
+│           │   ├── identity/             Principal, AuthenticationPort, JWT verification adapter
+│           │   ├── access/               RBAC: roles, permissions, deterministic Authorizer
+│           │   ├── audit/                append-only audit log
+│           │   └── ledger/               append-only event ledger + projection runner
+│           │       (each module: domain/ · application/ · adapters/ · index.ts)
+│           ├── ai/                       LlmProviderPort + DTOs, structured output, FakeLlmProvider,
+│           │   ├── tools/                typed tool framework + built-in epistemic tools
+│           │   ├── usage/                AI usage/cost recorder, CostBook
+│           │   └── adapters/anthropic/   the ONLY place @anthropic-ai/sdk appears
+│           └── infrastructure/           shared driven adapters: postgres (pool, tenant-scoped tx,
+│                                         migrator), storage (in-memory, local fs), logging (pino),
+│                                         config schema + loader, telemetry
+├── supabase/migrations/                  SQL migrations (Supabase-CLI-compatible layout, own runner)
+├── tests/
+│   ├── integration/                      real PostgreSQL: RLS, append-only, ledger, repositories
+│   ├── contract/                         one suite per port, run against every adapter
+│   ├── evals/                            golden-dataset harness (scaffold; no quality claims)
+│   └── architecture/                     dependency-cruiser + SQL invariants (RLS on every tenant table…)
+├── docs/                                 architecture, adr/, plans/, development, deployment, security,
+│                                         data-model, ai-architecture, integration-architecture, testing
+├── .github/workflows/ci.yml
+├── docker-compose.yml                    local PostgreSQL 16
+└── package.json · pnpm-workspace.yaml · tsconfig.base.json · .dependency-cruiser.cjs · eslint.config.js
+```
+
+Module dependency graph (enforced): `kernel` ← everything; `tenancy` ← `identity` ← `access`; `audit` and `ledger` are leaves usable by any module through their public `index.ts`; `ai` depends on `kernel`, `access` (tool permissions) and `audit`; `infrastructure` depends on `kernel` only; `apps/api` depends on `packages/core`; nothing depends on `apps/api`. Modules never import each other's `adapters/`. Packages are deliberately few: `contracts/` (shared API schemas for a PWA or n8n) is created when a second consumer exists, not before. [HYPOTHESIS — structure; the laws behind it are CONFIRMED]
+
+## G. Data model plan
+
+**Phase 0 tables** (all in schema `public`, all tenant tables RLS-forced, all append-only tables protected):
+
+| Table | Purpose | Tenant-scoped | Append-only |
+|---|---|---|---|
+| `schema_migrations` | migration ledger (version, checksum, applied_at) | no | yes |
+| `organizations` | tenants: id, slug, name, status, created_at | — (the tenant itself; RLS by id) | no |
+| `users` | id, auth_subject (provider subject), email, display_name, created_at | no (identity is global; visibility mediated by memberships) | no |
+| `memberships` | (organization_id, user_id), role_key, status, created_at | yes | no |
+| `audit_log` | organization_id (nullable for system events), actor {type,id}, action, target {type,id}, request_id, correlation_id, details (redacted jsonb), created_at | yes | **yes** |
+| `ledger_events` | id, organization_id, stream_type, stream_id, stream_sequence, global_sequence, event_type, schema_version, payload jsonb, **provenance jsonb (source kind + ref, actor, evidence refs, recorder)**, occurred_at, recorded_at, correlation_id, causation_id, idempotency_key | yes | **yes** |
+| `projection_checkpoints` | projection_name, last_global_sequence, updated_at | no | no |
+| `ai_usage` | organization_id (nullable), provider, model, tier, operation, use_case, input/output/cache tokens, estimated_cost (numeric) + currency + pricing_version, latency_ms, succeeded, error_kind, request_id, correlation_id, created_at | yes | **yes** |
+
+Roles are **code-defined** in Phase 0 (`owner`, `admin`, `operator`, `viewer` with explicit permission sets, versioned in source); custom per-tenant roles are a later migration, not a redesign. [HYPOTHESIS]
+
+**Reserved for the first vertical slice and beyond** (schemas designed now as documentation, created only when used): `documents`, `document_versions`, `extractions`, `entities` / `entity_aliases` (company graph: companies, people, customers, suppliers), `cases` (a unit of attention with decision status), `findings`, `evidence`, `decisions`, `approvals` (human gate), `rules` (company-specific, versioned), `outcomes`, `material_events` (shadow ledger for Material Availability Intelligence; a conflict between the ledger-derived view and the ERP is itself a finding, per Directive §12). Memory is structured and versioned: decision memory, evidence provenance, outcome memory, rules, configuration history — never a free-text "memory" table (Directive §13). [HYPOTHESIS]
+
+Every persisted record that can evolve carries `schema_version`. Time is always timezone-aware (`timestamptz`); the domain reads time only through `ClockPort`.
+
+## H. Tenant / RLS strategy
+
+1. Two database roles: **`dolmir_owner`** (owns objects, runs migrations) and **`dolmir_app`** (runtime; `NOBYPASSRLS`, `NOSUPERUSER`, not an owner; `SELECT/INSERT` on tables, `UPDATE` only where legitimate, **no `UPDATE/DELETE` on append-only tables**). [CONFIRMED design]
+2. Helper `dolmir.current_tenant()` returns `nullif(current_setting('dolmir.tenant_id', true), '')::uuid`. Policies: `USING (organization_id = dolmir.current_tenant()) WITH CHECK (organization_id = dolmir.current_tenant())`. `ENABLE` **and** `FORCE ROW LEVEL SECURITY` on every tenant table. [CONFIRMED design]
+3. The application never issues raw queries outside `withTenant(orgId, fn)`, which opens a transaction and calls `set_config('dolmir.tenant_id', $1, true)` (transaction-local, cleared on commit/rollback). System-level operations use an explicit `withSystemScope` that is audited. Application-level filters remain as defence in depth, never as the only guard. [CONFIRMED design]
+4. A trigger on append-only tables raises on `UPDATE`/`DELETE` even for the owner role, so accidental mutations in migrations fail loudly. [CONFIRMED design]
+5. **Tests that must pass in CI:** tenant A cannot read or write tenant B rows; no-tenant transaction reads zero rows and cannot insert; `dolmir_app` cannot `UPDATE`/`DELETE` audit, ledger or usage rows; an SQL architecture test asserts every table with an `organization_id` column has RLS enabled and forced and a policy present. [CONFIRMED plan]
+6. **Supabase compatibility:** the layout (`supabase/migrations`), role creation and GUC-based policies work on Supabase Postgres; direct client access through PostgREST is *not* part of the design (the API mediates every access, which is what makes the LLM boundary and the human gate enforceable). Supabase Auth issues the JWTs verified by the identity module. Not verifiable until a project exists. [HYPOTHESIS]
+
+## I. AI provider strategy
+
+- **Port:** `LlmProviderPort` with `complete()` and `completeStructured(schema)` returning `Result<LlmResponse, LlmError>`; provider capabilities (vision, structured output, EU region); **tiers** (`fast | standard | deep`) mapped to model ids in configuration; every response carries usage and the resolved model id. [CONFIRMED plan]
+- **Adapters:** `FakeLlmProvider` (scripted, for unit tests — never presented as a model), `AnthropicLlmProvider` (the one real adapter; the official SDK with an injected `fetch` so the **contract suite replays recorded exchanges with no key and no network**). A second provider later must pass the same contract suite. The SDK surface is checked against current documentation before the adapter is written; no API shape is assumed from memory. [CONFIRMED plan]
+- **Structured output:** Zod schemas are the single source of truth; converted to JSON Schema for the provider; responses validated before they reach application code; validation failure is a typed `BAD_RESPONSE`, never silently coerced. [CONFIRMED plan]
+- **Typed tools:** `defineTool({ name, description, input, output, permission, handler })`; a registry and an executor that checks the caller's permission through the access module, validates input and output, records an audit entry, maps errors, and returns structured results. Built-in epistemic tools from day one: `declare_non_determinato` (what is known / unknown / conflicting / missing / which human decision is needed) and `request_human_decision`. [CONFIRMED plan]
+- **Cost:** every call passes through `RecordedLlmProvider`, which writes an `ai_usage` row (tenant, provider, model, tier, operation, use case, tokens, estimated cost, latency, outcome). Prices live in a versioned `CostBook` (USD per million tokens; overridable; unpriced models record tokens and an explicit `0` estimate so the gap is visible). [CONFIRMED plan]
+- **Caching and routing:** requests carry a content hash; a `CompletionCachePort` with an in-memory adapter exists so content-hash caching is a configuration later, not a redesign. Cheap tiers for classification, `standard` for extraction, `deep` reserved. Native text extraction precedes any vision call. [HYPOTHESIS — thresholds to be tuned on real documents]
+- **Epistemics:** `EpistemicStatus = FACT | OBSERVATION | ASSUMPTION | HYPOTHESIS`; `Evidence` requires a traceable source ref; a `FACT` is unconstructible without a computation or citation; uncertainty is typed as *missing information* vs *genuinely stochastic*; **`NON_DETERMINATO` is a first-class result type**, not an error. No numeric confidence is presented as calibrated until calibration data exists (Directive §10). [CONFIRMED plan]
+
+## J. n8n integration boundary
+
+n8n is orchestration and integration; DOLMIR owns domain logic, canonical models, verification, decisions, audit, memory and policy. [CONFIRMED — Directive §16]
+
+- **Inbound:** n8n (Gmail/IMAP trigger, schedules, ERP polling) calls DOLMIR **ingestion endpoints** authenticated with per-tenant HMAC-signed requests (timestamp + nonce, replay-protected). DOLMIR stores the raw payload as a document, appends a ledger event, and runs its own pipeline. n8n never writes to DOLMIR tables.
+- **Outbound:** DOLMIR emits notifications/webhooks for approved actions; n8n executes external side effects (send email, update ERP) **only after** a persisted human approval exists in DOLMIR. Every outbound action is idempotent and audited.
+- **MCP:** only explicitly approved workflows are MCP-enabled; no destructive n8n operations without approval; node configuration comes from official n8n documentation/tools, never guessed.
+- **Phase 0 delivers:** the boundary as an ADR and integration document plus the request-signing utility; the first endpoints arrive with the vertical slice. Currently zero n8n workflows exist. [CONFIRMED]
+
+## K. Security model
+
+- **Tenant isolation:** RLS as above; tenant id never taken from the client body — it is derived from the authenticated principal's membership for the org in the URL path. [CONFIRMED plan]
+- **Authentication:** `AuthenticationPort` → JWT verification with `jose` (asymmetric JWKS or HS256 secret; issuer/audience checked; clock via `ClockPort`). Supabase Auth is the intended issuer; a local dev issuer/mint command exists for development and tests. API keys for machine callers (n8n) use HMAC request signing, not JWTs. [HYPOTHESIS on Supabase Auth; CONFIRMED plan on mechanism]
+- **RBAC:** deterministic `Authorizer.require(principal, permission)` in the application layer; permissions are named constants; tools declare the permission they need; the LLM cannot bypass authorization because it can only act through tools. [CONFIRMED plan]
+- **Secrets:** only the composition root reads `process.env`; config marks secrets; pino redacts headers/keys; PII redaction (emails, phones, P.IVA, IBAN) on logged text; `.env` git-ignored; gitleaks in CI. [CONFIRMED plan]
+- **Audit:** every authenticated mutation, tool execution, approval and system-scope operation writes an audit row with actor, request id and correlation id. [CONFIRMED plan]
+- **Prompt-injection resistance:** untrusted document text is data, never instructions; tool permissions bound what a model can cause; structured outputs are validated; external links in documents are never fetched automatically. [CONFIRMED plan]
+- **Destructive-action protection:** no destructive endpoint exists in Phase 0; the human gate is structural for consequential actions (Directive §15). [CONFIRMED]
+- **Compliance context:** DOLMIR is a GDPR processor; AI providers are named sub-processors and swappable per tenant; no Annex III high-risk use cases (hiring, worker evaluation, credit) are built. [CONFIRMED — `08-risks-and-compliance.md`]
+
+## L. Testing strategy
+
+| Layer | Location | Runs against | Gate |
+|---|---|---|---|
+| Unit | `packages/*/src/**/*.test.ts`, `apps/*/src/**/*.test.ts` | pure code, in-memory adapters, `FakeLlmProvider` | every push |
+| Integration | `tests/integration` | real PostgreSQL 16 (local cluster or CI service): RLS isolation, append-only enforcement, ledger concurrency, migrations idempotence, HTTP app with injected dependencies | every push |
+| Contract | `tests/contract` | one suite per port, executed against **every** adapter (storage: memory + local fs; LLM: fake + Anthropic-with-recorded-exchanges; repositories: memory + Postgres) | every push |
+| Architecture | `tests/architecture` + `pnpm depcruise` | dependency rules, forbidden imports, `process.env` outside composition root, SQL invariants (RLS forced on every tenant table; no UPDATE/DELETE grants on append-only tables) | every push — **a violation fails CI** |
+| Evals | `tests/evals` | golden datasets (to be labeled by the product owner from real, permitted documents); runner skips without a key and never reports "quality" from unit tests | on demand |
+
+## M. CI strategy
+
+GitHub Actions on push to `main` and `claude/**`, and on pull requests to `main`: install with frozen lockfile → typecheck → ESLint (type-aware, `no-floating-promises`) → Prettier check → dependency-cruiser → unit tests → PostgreSQL 16 service → migrations → integration + contract + architecture tests → gitleaks → `pnpm audit` (blocking on critical). Required status check for merging to `main` is a repository setting the owner must enable. [CONFIRMED plan]
+
+## N. Observability strategy
+
+pino JSON logs (pretty in dev) with `request_id`, `correlation_id`, `tenant_id`, `user_id` bound per request via `AsyncLocalStorage`; secret and PII redaction; `GET /health/live` (process up) and `GET /health/ready` (database reachable, migrations current, provider configured or explicitly "not configured"); a `Telemetry` port (counters/histograms) with log-backed implementation so OpenTelemetry or Sentry become adapters later. Operational logs are separate from domain records (audit, ledger, usage). [CONFIRMED plan]
+
+## O. Cost tracking strategy
+
+`ai_usage` rows from the first call (tenant, provider, model, tier, operation, use case, tokens, estimated cost, currency, pricing version, latency, outcome, request/correlation ids); a `CostBook` versioned in configuration; per-tenant and per-use-case aggregation queries in the data-model document; an EUR reporting rate is a documented constant reviewed periodically, never a live lookup on an invoice path. [CONFIRMED plan]
+
+## P. First vertical slice (after Phase 0 — proposal)
+
+**Selected workflow:** *Inbound request for quotation (RdO) by email → verified, evidence-backed case for the estimator with a human gate.*
+
+Evidence: Notion "Strategy" and "Dolmir — Business OS" name RdO → preventivo as the beachhead; the Solutions database lists "Preventivo Rapido — Implementazione" as *In sviluppo* with repo path `packages/rfq-engine`; the 90-day plan schedules "estrazione, storico, bozze, approvazione" for weeks 10–11; `prova_1` already holds the schema, fixtures and rules. The Notion "Product Foundation" page (edited today) proposes *Magazzino / controllo materiali* as a **candidate** explicitly marked "EVIDENCE-BASED HYPOTHESIS / da validare" — its architecture (material events, shadow ledger, purchased ≠ documented ≠ received ≠ available) is preserved by the event ledger and reserved tables, and it becomes the second configuration of the same pipeline. [HYPOTHESIS — recommended; owner confirmation requested, see OD-4]
+
+Pipeline (workflow-agnostic; RdO is the first configuration): ingest email + attachments (object storage, content hash, `DocumentReceived`) → classify (deterministic signals first, LLM only for ambiguous cases) → extract typed fields with verbatim evidence spans → normalise (units, dates, codes — deterministic) → resolve entities against the tenant's customer records (candidates with match reasons; ambiguity → `NON_DETERMINATO`) → verify (required fields, cross-source consistency such as body vs attachment quantities) → reason and explain (LLM narration grounded only on evidence refs) → decision status (`READY_FOR_REVIEW | NON_DETERMINATO | NOT_APPLICABLE`) → human gate (persisted approval) → audit. **Out of scope:** autonomous pricing, drawing interpretation, sending anything externally, ERP write-back (each is a later, approval-gated module).
+
+## Q. Exact implementation sequence (Phase 0)
+
+Each step is one or two commits, each leaving CI green.
+
+| # | Step | Deliverable | Verification |
+|---|---|---|---|
+| 0 | Plan, ADRs 0001–0009, README rewrite, `Docs/`→`docs/` | this document; ADR set; README describing the current product and the historical branch | review |
+| 1 | Workspace scaffold | pnpm workspaces, TS strict base config, ESLint (type-aware) + Prettier, Vitest projects, dependency-cruiser baseline rules, `.editorconfig`, `.gitignore`, `.env.example`, CI skeleton | `pnpm check` passes on the empty skeleton |
+| 2 | Kernel | `Result`, `DomainError` hierarchy, branded ids, `ClockPort` (+ system/fixed), epistemic types, `NonDeterminato`, redaction, schema-version helper | unit tests |
+| 3 | Configuration | Zod schema, loader that fails fast and rejects unknown `DOLMIR_*` variables, secret marking, typed access | unit tests incl. failure messages |
+| 4 | Logging, request context, errors, telemetry port | pino factory with redaction; `AsyncLocalStorage` context; problem-details mapper | unit tests |
+| 5 | Database foundation | `docker-compose.yml`; migrator (ordered SQL, checksums, `schema_migrations`); roles; `dolmir.current_tenant()`; append-only trigger; pool + `withTenant` / `withSystemScope`; integration harness (fresh database per run) | integration tests |
+| 6 | Tenancy + RLS | `organizations`, `users`, `memberships` with forced RLS; repositories (Postgres + in-memory); `TenantContext` | **RLS isolation tests**; SQL architecture test |
+| 7 | Identity + Access | `AuthenticationPort` + `jose` adapter (JWKS/HS256), `Principal`, dev-token mint; roles/permissions constants, `Authorizer`; membership → `TenantContext` | unit + integration tests |
+| 8 | Audit log | `AuditRecorder` port, Postgres adapter, append-only enforcement | tests incl. forbidden UPDATE/DELETE |
+| 9 | Event ledger | `ledger_events`, `appendToStream` with expected-version + idempotency key, `readStream`, `readAll`, projector with checkpoints, provenance required | tests: concurrency conflict, idempotency, rebuild |
+| 10 | Object storage | `ObjectStoragePort`, in-memory + local-fs adapters, content-hash keys | contract suite on both adapters |
+| 11 | AI layer | port + DTOs, `FakeLlmProvider`, Anthropic adapter with injected fetch, structured output, error mapping, `RecordedLlmProvider` + `CostBook` + `ai_usage`, tool framework + built-in epistemic tools, completion cache port | unit + contract (recorded exchanges) + integration |
+| 12 | Application shell | Fastify app: request-id, auth, tenant resolution, error handler; routes `/health/live`, `/health/ready`, `/v1/me`, `/v1/orgs/:orgId` (+ audit listing as the tenant-scoped proof); composition root; CLI `migrate`, `doctor`, `dev-token` | e2e tests with injected app; boots locally against PostgreSQL |
+| 13 | CI complete + documentation | Postgres service job, gitleaks, audit; `docs/` set (architecture, development, deployment, security, data-model, ai-architecture, integration-architecture, testing); ADR status updates | CI green; docs reviewed against the code |
+
+## R. Risks
+
+| # | Risk | Mitigation |
+|---|---|---|
+| R1 | **Build-vs-sell tension:** the 90-day plan says "do not build a database" during the first customer push; the directive mandates the foundation. Solo capacity is the binding constraint. | Foundation kept minimal and usable; every abstraction has a consumer in Phase 0 or the first slice; no features beyond the plan. Surfaced as contradiction C-4 for an explicit owner decision on sequencing. |
+| R2 | Two repositories with overlapping AI layers (`prova_1/ai-core` vs the platform's `ai/`) drift. | Port, do not fork silently: the platform layer is the canonical one from now; `prova_1` keeps the demo until the website consumes the platform API (OD-3). |
+| R3 | No Supabase project yet; Supabase-specific behaviour is unverified. | Local PostgreSQL 16 with an identical schema and roles; Supabase compatibility marked [HYPOTHESIS]; first deployment is a separate, approval-gated step (OD-2). |
+| R4 | No LLM key or network to the provider in the build environment. | Contract tests via recorded exchanges; live smoke test documented and run by the owner. |
+| R5 | RLS misconfiguration (policy missing on a new table, owner role used at runtime). | SQL architecture test over `pg_tables`/`pg_policies`; runtime role check at boot (`doctor`). |
+| R6 | Over-engineering the ledger/projection machinery before a real consumer. | Phase 0 ships the append/read/project primitives with tests only; real projections arrive with the slice. |
+| R7 | Sandbox limits (no Docker) diverge from developer machines. | `docker-compose.yml` for developers; local cluster used here; both exercised by the same migrator. |
+| R8 | `prova_1` production deploys from a `claude/*` branch with no `main`. | Out of scope for this repository; flagged to the owner. |
+
+## S. Open decisions
+
+| ID | Decision | Options | Recommendation | Blocking Phase 0? |
+|---|---|---|---|---|
+| OD-1 | Branch name: directive says `claude/dolmir-platform-foundation`; the harness bound this session to `claude/dolmir-foundation-architecture-784tn2` and forbids other branches. | (a) keep harness branch; (b) owner renames after push | (a) now, owner may rename | No |
+| OD-2 | Supabase project creation (billing) and Supabase Auth as issuer | (a) create now; (b) create at first deployment | (b); local Postgres until then | No |
+| OD-3 | Repository topology | (a) platform in `DOLMIR`, website/demo stays in `prova_1` and later calls the platform API; (b) consolidate everything in one repository | (a) as directed; revisit consolidation after the slice | No |
+| OD-4 | First vertical slice | (a) RdO intake → case with human gate; (b) Magazzino / material receipt | (a), with Magazzino as second configuration | No for Phase 0; **yes before slice start** |
+| OD-5 | Runtime | (a) TypeScript core, Python reserved for bounded workers; (b) Python core; (c) both from day one | (a) — ADR-0002 | **Veto window:** implementation starts on (a) |
+| OD-6 | Tenant addressing in the API | path `/v1/orgs/:orgId/…` vs header | path (explicit, auditable) | No |
+| OD-7 | Package manager | pnpm (strict, no phantom deps) vs npm (as in `prova_1`) | pnpm | No |
+| OD-8 | Human-gate channel for the first client | email-based approval vs PWA | slice decision; Phase 0 stores approvals channel-agnostically | No |
+| OD-9 | Location of the missing "Master Technical Discovery & Build Plan" | — | owner to confirm whether it exists beyond the directive | No |
+
+**Contradictions surfaced (not silently resolved):**
+
+- **C-1** Branch name (OD-1).
+- **C-2** The priority-1 document is not found; the directive is used in its place (OD-9).
+- **C-3** Historical Trader OS documents call themselves "the law of the project"; superseded for this product (ADR-0008).
+- **C-4** `prova_1/docs/architecture/overview.md` and the Notion 90-day plan defer database/auth/tenancy; the directive mandates them now. Directive wins; the owner should consciously accept the capacity cost (R1).
+- **C-5** Beachhead workflow (RdO → preventivo, "in sviluppo") vs the newer "Product Foundation" candidate (Magazzino). Resolved as one pipeline with two configurations, RdO first (OD-4).
+- **C-6** `prova_1` pins all tiers to `claude-opus-5`; the directive requires cost-aware routing. Resolved as configuration with a conservative default and measurable cost.
+
+## T. Acceptance criteria (Definition of Done for Phase 0)
+
+- [ ] `pnpm install && pnpm check` (typecheck, lint, format, architecture) passes locally and in CI.
+- [ ] `pnpm db:migrate` applies all migrations to a fresh PostgreSQL 16; `pnpm doctor` reports configuration valid, database reachable, runtime role cannot bypass RLS, migrations current.
+- [ ] Invalid configuration (missing required value, unknown `DOLMIR_*` variable) fails boot with a legible list of problems.
+- [ ] RLS tests prove: cross-tenant reads return nothing, cross-tenant writes fail, no-tenant transactions see nothing; the SQL architecture test proves every tenant table has forced RLS and a policy.
+- [ ] Append-only tests prove `UPDATE`/`DELETE` are impossible for the runtime role on `audit_log`, `ledger_events`, `ai_usage`.
+- [ ] A JWT from the configured issuer resolves to a `Principal`, membership resolution yields a `TenantContext`, and a permission check denies an unauthorised action with a problem-details response.
+- [ ] Ledger tests prove optimistic concurrency, idempotency and projection rebuild from events with provenance present on every event.
+- [ ] The Anthropic adapter passes the LLM contract suite from recorded exchanges with no key; the fake provider passes the same suite; a recorded call produces an `ai_usage` row with tenant, model, operation, tokens and estimated cost.
+- [ ] A tool executed through the tool executor is permission-checked, schema-validated and audited; `declare_non_determinato` yields a structured `NON_DETERMINATO` result.
+- [ ] The API boots, `/health/live` and `/health/ready` respond, `/v1/me` and a tenant-scoped route work end-to-end in an integration test.
+- [ ] Structured logs carry request, correlation and tenant ids; secrets and PII are redacted in tests.
+- [ ] `docs/` contains architecture, development, deployment, security, data-model, AI architecture, integration architecture, testing, and ADRs for every material decision.
+- [ ] The first vertical slice can be started by adding modules and migrations, without changing kernel, tenancy, ledger, audit or AI layer contracts.
