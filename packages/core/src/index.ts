@@ -4,3 +4,4 @@
  * (see .dependency-cruiser.cjs).
  */
 export * from './kernel/index.js';
+export * from './infrastructure/index.js';

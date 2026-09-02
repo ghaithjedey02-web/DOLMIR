@@ -7,3 +7,5 @@ export * from './non-determinato.js';
 export * from './redaction.js';
 export * from './schema-version.js';
 export * from './context.js';
+export * from './logger.js';
+export * from './telemetry.js';
