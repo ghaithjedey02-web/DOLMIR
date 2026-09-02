@@ -6,8 +6,10 @@ import {
   isDomainError,
   validationErrorFromZod,
 } from '../../../kernel/errors.js';
+import { ActorType } from '../../../kernel/context.js';
 import { err, ok, type Result } from '../../../kernel/result.js';
 import type { TransactionRunner } from '../../../kernel/scope.js';
+import type { AuditRecorder } from '../../audit/index.js';
 import { type Membership } from '../domain/membership.js';
 import { NewOrganizationSchema, type Organization } from '../domain/organization.js';
 import { NewUserSchema, type User } from '../domain/user.js';
@@ -37,6 +39,7 @@ export interface ProvisionOrganizationDependencies {
   readonly organizations: OrganizationRepository;
   readonly users: UserRepository;
   readonly memberships: MembershipRepository;
+  readonly audit: AuditRecorder;
 }
 
 export class ProvisionOrganization {
@@ -85,6 +88,13 @@ export class ProvisionOrganization {
             organizationId: organization.id,
             userId: owner.id,
             roleKey: 'owner',
+          });
+          await this.deps.audit.record(scope, {
+            organizationId: organization.id,
+            actor: { type: ActorType.USER, id: owner.id },
+            action: 'organization.provisioned',
+            target: { type: 'organization', id: organization.id },
+            details: { slug: organization.slug, ownerUserId: owner.id },
           });
           return ok({ organization, owner, membership });
         },

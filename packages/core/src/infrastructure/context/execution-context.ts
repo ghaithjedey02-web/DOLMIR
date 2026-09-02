@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { type ExecutionContext } from '../../kernel/context.js';
+import { type ExecutionContext, type ExecutionContextProvider } from '../../kernel/context.js';
 import { InternalError } from '../../kernel/errors.js';
 import { newCorrelationId, newRequestId } from '../../kernel/ids.js';
 
@@ -18,6 +18,9 @@ export function runWithContext<T>(context: ExecutionContext, fn: () => T): T {
 export function currentContext(): ExecutionContext | undefined {
   return storage.getStore();
 }
+
+/** The provider application services depend on; backed by the async-local store. */
+export const executionContextProvider: ExecutionContextProvider = { current: currentContext };
 
 export function requireContext(): ExecutionContext {
   const context = storage.getStore();

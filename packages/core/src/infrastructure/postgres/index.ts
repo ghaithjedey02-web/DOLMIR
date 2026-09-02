@@ -5,6 +5,7 @@ export {
   type PostgresSystemScope,
   type PostgresTenantScope,
   PostgresTransactionRunner,
+  type PostgresTransactionRunnerOptions,
 } from './transaction-runner.js';
 export {
   type AppliedMigration,

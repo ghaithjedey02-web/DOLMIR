@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { FixedClock } from '../../../kernel/clock.js';
+import { noExecutionContext } from '../../../kernel/context.js';
 import { newOrganizationId } from '../../../kernel/ids.js';
+import { AuditTrail, InMemoryAuditLogRepository } from '../../audit/index.js';
 import {
   InMemoryMembershipRepository,
   InMemoryOrganizationRepository,
@@ -14,17 +16,21 @@ import { ProvisionOrganization } from './provision-organization.js';
 import { ResolveTenantContext } from './resolve-tenant-context.js';
 
 function harness() {
-  const store = new InMemoryTenancyStore(new FixedClock());
+  const clock = new FixedClock();
+  const store = new InMemoryTenancyStore(clock);
   const transactions = new InMemoryTransactionRunner();
+  const auditLog = new InMemoryAuditLogRepository();
   const deps = {
     transactions,
     organizations: new InMemoryOrganizationRepository(store),
     users: new InMemoryUserRepository(store),
     memberships: new InMemoryMembershipRepository(store),
+    audit: new AuditTrail({ repository: auditLog, clock, context: noExecutionContext }),
   };
   return {
     store,
     transactions,
+    auditLog,
     provision: new ProvisionOrganization(deps),
     resolve: new ResolveTenantContext(deps),
     list: new ListUserOrganizations(deps),
@@ -44,6 +50,13 @@ describe('ProvisionOrganization', () => {
     expect(result.value.owner.authSubject).toBe('auth|rossi');
     expect(result.value.membership).toMatchObject({ roleKey: 'owner', status: 'active' });
     expect(h.transactions.systemScopeReasons).toEqual(['provision_organization']);
+    expect(h.auditLog.entries).toHaveLength(1);
+    expect(h.auditLog.entries[0]).toMatchObject({
+      organizationId: result.value.organization.id,
+      action: 'organization.provisioned',
+      actor: { type: 'USER', id: result.value.owner.id },
+      target: { type: 'organization', id: result.value.organization.id },
+    });
   });
 
   it('rejects invalid input as a value and never touches the store', async () => {

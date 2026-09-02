@@ -1,5 +1,6 @@
 export {
   currentContext,
+  executionContextProvider,
   newExecutionContext,
   requireContext,
   runWithContext,

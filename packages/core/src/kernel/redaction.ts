@@ -40,15 +40,28 @@ export const REDACTED = '[REDACTED]';
  * Deep-copies a value for logging: secret-looking keys are replaced wholesale,
  * every string is redacted, everything else passes through.
  */
-export function redactForLog(value: unknown, depth = 0): unknown {
+export function redactForLog(value: unknown): unknown {
+  return redactDeep(value, { strings: true }, 0);
+}
+
+/**
+ * Deep-copies a value for persistence in tenant-owned records (audit details,
+ * event payloads): secret-looking keys are blanked, business text is kept —
+ * Row-Level Security, not redaction, protects that data.
+ */
+export function redactSecrets(value: unknown): unknown {
+  return redactDeep(value, { strings: false }, 0);
+}
+
+function redactDeep(value: unknown, options: { strings: boolean }, depth: number): unknown {
   if (depth > 8) return '[TRUNCATED]';
-  if (typeof value === 'string') return redactText(value);
+  if (typeof value === 'string') return options.strings ? redactText(value) : value;
   if (value === null || typeof value !== 'object') return value;
   if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map((item) => redactForLog(item, depth + 1));
+  if (Array.isArray(value)) return value.map((item) => redactDeep(item, options, depth + 1));
   const result: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    result[key] = SECRET_KEY.test(key) ? REDACTED : redactForLog(entry, depth + 1);
+    result[key] = SECRET_KEY.test(key) ? REDACTED : redactDeep(entry, options, depth + 1);
   }
   return result;
 }

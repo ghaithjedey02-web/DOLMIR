@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  AuditTrail,
   ListUserOrganizations,
+  PostgresAuditLogRepository,
+  noExecutionContext,
+  systemClock,
   PostgresMembershipRepository,
   PostgresOrganizationRepository,
   PostgresTransactionRunner,
@@ -41,6 +45,11 @@ describe('tenancy under Row-Level Security', () => {
       organizations,
       users,
       memberships,
+      audit: new AuditTrail({
+        repository: new PostgresAuditLogRepository(),
+        clock: systemClock,
+        context: noExecutionContext,
+      }),
     });
     const a = await provision.execute({
       organization: { slug: 'officina-a', name: 'Officina A' },

@@ -45,3 +45,10 @@ export const ExecutionContextSchema = z
   })
   .strict();
 export type ExecutionContext = z.infer<typeof ExecutionContextSchema>;
+
+/** Read access to the current context, so application services can stamp records without depending on Node internals. */
+export interface ExecutionContextProvider {
+  current(): ExecutionContext | undefined;
+}
+
+export const noExecutionContext: ExecutionContextProvider = { current: () => undefined };

@@ -37,13 +37,25 @@ export function clientOf(scope: Scope): pg.PoolClient {
   return client;
 }
 
+export interface PostgresTransactionRunnerOptions {
+  /**
+   * Invoked inside every system-scope transaction before the caller's work,
+   * so the composition root can leave an audit entry for the privileged path
+   * in the same transaction (the runner itself cannot depend on the audit
+   * module).
+   */
+  readonly onSystemScopeOpened?: (scope: SystemScope) => Promise<void>;
+}
+
 export class PostgresTransactionRunner implements TransactionRunner {
   private readonly pool: pg.Pool;
   private readonly logger: Logger;
+  private readonly options: PostgresTransactionRunnerOptions;
 
-  constructor(pool: pg.Pool, logger: Logger) {
+  constructor(pool: pg.Pool, logger: Logger, options: PostgresTransactionRunnerOptions = {}) {
     this.pool = pool;
     this.logger = logger;
+    this.options = options;
   }
 
   async withTenant<T>(
@@ -72,7 +84,12 @@ export class PostgresTransactionRunner implements TransactionRunner {
         await client.query("SELECT set_config('dolmir.scope', 'system', true)", []);
       },
       (client): PostgresSystemScope => ({ kind: 'system', reason, [CLIENT]: client }),
-      fn,
+      async (scope) => {
+        if (this.options.onSystemScopeOpened !== undefined) {
+          await this.options.onSystemScopeOpened(scope);
+        }
+        return fn(scope);
+      },
     );
   }
 
