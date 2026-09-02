@@ -1,6 +1,6 @@
 # ADR-0009 — n8n is an orchestration and integration layer, not the domain core
 
-**Status:** Proposed · **Date:** 2026-09-02
+**Status:** Accepted, amended 2026-09-02 (see below) · **Date:** 2026-09-02
 
 ## Context
 
@@ -27,3 +27,7 @@ n8n is excellent at connecting systems and terrible as a system of record: its s
 
 - Connector work in n8n is configuration; every connector still ends in a DOLMIR ingestion contract.
 - Integration tests for the boundary use recorded webhook payloads, not a live n8n instance.
+
+## Amendment (2026-09-02, Product Master Direction)
+
+Integrations are a Core capability behind a **connector abstraction** (Direction §15): mailbox, drive, ERP, CRM and messaging connectors implement DOLMIR ports, hold per-tenant encrypted credentials and are audited. n8n is **one** connector runtime and orchestration option among others (pg-boss for in-process jobs; native connectors where they are commercially important), not the integration strategy. The boundary rules above continue to apply whenever n8n is used: no domain logic in n8n, no direct database writes, every consequential action behind a persisted human approval.

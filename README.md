@@ -1,29 +1,40 @@
 # DOLMIR
 
-**DOLMIR is an AI-native operational control layer for companies.** It sits above the systems an SME already uses — email, documents, ERP, orders, invoices, suppliers, customers, calendars — and continuously identifies what deserves attention, explains why with evidence, proposes the next action, and stops for human approval whenever judgment or risk requires it.
+**DOLMIR is an AI Business System for companies.** It connects to the systems a company already uses — email, documents, ERP, orders, invoices, suppliers, customers — understands what is happening, reasons over it with evidence, recommends and drafts, stops for human approval where policy requires it, executes approved actions, and records what happened. It is built once as a platform and configured for each company.
 
 ```
-INPUT → CLASSIFY → EXTRACT → NORMALISE → RESOLVE ENTITIES → VERIFY
-      → DETECT CONFLICTS / EXCEPTIONS → REASON → EXPLAIN
-      → HUMAN DECISION → ACTION → OUTCOME → MEMORY
+DATA → AI UNDERSTANDING → REASONING → EVIDENCE → RECOMMENDATION
+     → HUMAN APPROVAL → ACTION → RESULT → COMPANY MEMORY
 ```
 
-DOLMIR does not replace the ERP, and **DOLMIR does not guess**: when evidence is insufficient or contradictory it produces `NON DETERMINATO` — what is known, what is unknown, which evidence conflicts, what is missing, and which human decision is required.
+DOLMIR is not a chatbot, not an ERP and not a dashboard of generic charts. **DOLMIR does not guess**: business numbers come from structured data and deterministic code; claims carry evidence; when evidence is insufficient or contradictory the answer is `NON DETERMINATO` — what is known, what is unknown, which evidence conflicts, what is missing, and which human decision is required.
+
+## Product layers
+
+| Layer                        | What it is                                                                                                                                      | Where                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **DOLMIR Core**              | The reusable engine: AI model abstraction and routing, cost tracking, typed tools with policy, event ledger, evidence, tenancy, security, audit | `packages/core`                                                                            |
+| **DOLMIR Business Platform** | The product a company buys: workspace, AI Agent, documents, entities, approvals, activity, integrations, settings, AI usage                     | `apps/api` (this phase), `apps/web` (later)                                                |
+| **AI Systems**               | Reusable capabilities built on Core: commercial inbox intelligence, procurement documents, material intelligence…                               | `packages/systems/<system>` (from Phase 2)                                                 |
+| **Company-specific AI**      | Configuration first — rules, terminology, policies, connectors — and custom agents only where genuinely needed                                  | tenant configuration in the database; `packages/tenants/<slug>` only when code is required |
+
+See [ADR-0010](docs/architecture/adr/0010-product-layering-core-platform-systems.md) and the [product-direction alignment](docs/plans/PRODUCT_DIRECTION_ALIGNMENT.md).
 
 ## Status
 
-**Phase 0 — Foundation.** This repository is the platform (multi-tenant backend, data foundation, AI layer, audit, event ledger). The public website (dolmir.com) and the sales demonstration live in a separate repository and are not changed here.
+**Phase 1 — Core foundation** (the plan's "Phase 0"). This repository holds the platform: multi-tenant backend, data foundation, AI layer, audit, event ledger. The public website (dolmir.com) lives in a separate repository and is not changed here.
 
-- Plan: [`docs/plans/FOUNDATION_IMPLEMENTATION_PLAN.md`](docs/plans/FOUNDATION_IMPLEMENTATION_PLAN.md)
+- Alignment with the Product Master Direction: [`docs/plans/PRODUCT_DIRECTION_ALIGNMENT.md`](docs/plans/PRODUCT_DIRECTION_ALIGNMENT.md)
+- Foundation plan: [`docs/plans/FOUNDATION_IMPLEMENTATION_PLAN.md`](docs/plans/FOUNDATION_IMPLEMENTATION_PLAN.md)
 - Architecture decisions: [`docs/architecture/adr/`](docs/architecture/adr/)
 - Documentation index: [`docs/README.md`](docs/README.md)
 
-## Four architectural laws
+## Architectural laws
 
 1. **Event ledger** — operational facts are immutable, append-only events with provenance; current state is a projection.
-2. **LLM boundary** — models never touch the database and never invent business numbers; they interpret, classify, extract with evidence, reason, explain and draft through typed, permission-bounded tools.
+2. **LLM boundary** — models never touch the database and never invent business numbers; they interpret, classify, extract with evidence, reason, explain and draft through typed tools. Every tool declares an effect (`read`, `analyze`, `draft`, `act`) and runs under the company's action policy (`READ_ONLY` … `REQUIRE_APPROVAL` … `AUTO_EXECUTE`); approval is a human act.
 3. **Tenant isolation** — PostgreSQL Row-Level Security is enabled and forced on every tenant table; the runtime role cannot bypass it.
-4. **Canonical connectors** — domain code depends on ports (`LlmProviderPort`, `ObjectStoragePort`, `EmailAdapter`, `ErpAdapter`…), never on a vendor.
+4. **Canonical connectors** — domain code depends on ports (`LlmProviderPort`, `ObjectStoragePort`, connectors…), never on a vendor.
 
 Architecture is enforced in CI (dependency rules, SQL invariants, contract suites), not promised in prose.
 

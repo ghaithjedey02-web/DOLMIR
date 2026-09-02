@@ -3,6 +3,8 @@
 **Status:** Proposed for review · **Date:** 2026-09-02 · **Repository:** `ghaithjedey02-web/DOLMIR`
 **Working branch:** `claude/dolmir-foundation-architecture-784tn2` (see Open Decision OD-1 on the branch name)
 
+> **Amended 2026-09-02** by the Product Master Direction. The product framing (§P first workflow, the material-intelligence emphasis in §G) is superseded by [`PRODUCT_DIRECTION_ALIGNMENT.md`](PRODUCT_DIRECTION_ALIGNMENT.md); the technical foundation, laws, sequence and acceptance criteria stand. Step 11 additionally delivers action policy levels for tools (ADR-0011).
+
 Every material statement below carries one of three markers, as required by the Master Build Directive §28:
 
 - **[CONFIRMED]** — verified against the repository, a connected system, or a current document.
@@ -138,7 +140,7 @@ Module dependency graph (enforced): `kernel` ← everything; `tenancy` ← `iden
 
 Roles are **code-defined** in Phase 0 (`owner`, `admin`, `operator`, `viewer` with explicit permission sets, versioned in source); custom per-tenant roles are a later migration, not a redesign. [HYPOTHESIS]
 
-**Reserved for the first vertical slice and beyond** (schemas designed now as documentation, created only when used): `documents`, `document_versions`, `extractions`, `entities` / `entity_aliases` (company graph: companies, people, customers, suppliers), `cases` (a unit of attention with decision status), `findings`, `evidence`, `decisions`, `approvals` (human gate), `rules` (company-specific, versioned), `outcomes`, `material_events` (shadow ledger for Material Availability Intelligence; a conflict between the ledger-derived view and the ERP is itself a finding, per Directive §12). Memory is structured and versioned: decision memory, evidence provenance, outcome memory, rules, configuration history — never a free-text "memory" table (Directive §13). [HYPOTHESIS]
+**Reserved for later phases** (schemas designed now as documentation, created only when a module uses them; material intelligence is one optional AI System per the Product Master Direction §9, not the product): `documents`, `document_versions`, `extractions`, `entities` / `entity_aliases` (company graph: companies, people, customers, suppliers), `cases` (a unit of attention with decision status), `findings`, `evidence`, `decisions`, `approvals` (human gate), `rules` (company-specific, versioned), `outcomes`, `material_events` (shadow ledger for Material Availability Intelligence; a conflict between the ledger-derived view and the ERP is itself a finding, per Directive §12). Memory is structured and versioned: decision memory, evidence provenance, outcome memory, rules, configuration history — never a free-text "memory" table (Directive §13). [HYPOTHESIS]
 
 Every persisted record that can evolve carries `schema_version`. Time is always timezone-aware (`timestamptz`); the domain reads time only through `ClockPort`.
 
@@ -203,7 +205,7 @@ pino JSON logs (pretty in dev) with `request_id`, `correlation_id`, `tenant_id`,
 
 `ai_usage` rows from the first call (tenant, provider, model, tier, operation, use case, tokens, estimated cost, currency, pricing version, latency, outcome, request/correlation ids); a `CostBook` versioned in configuration; per-tenant and per-use-case aggregation queries in the data-model document; an EUR reporting rate is a documented constant reviewed periodically, never a live lookup on an invoice path. [CONFIRMED plan]
 
-## P. First vertical slice (after Phase 0 — proposal)
+## P. First vertical slice (after Phase 0 — proposal; superseded by `PRODUCT_DIRECTION_ALIGNMENT.md` §7: the first end-to-end AI System is Commercial Inbox Intelligence, and material intelligence is a later module)
 
 **Selected workflow:** _Inbound request for quotation (RdO) by email → verified, evidence-backed case for the estimator with a human gate._
 
