@@ -5,3 +5,4 @@
  */
 export * from './kernel/index.js';
 export * from './infrastructure/index.js';
+export * from './modules/tenancy/index.js';

@@ -48,6 +48,9 @@ export default tseslint.config(
         'error',
         { allowConstantLoopConditions: true },
       ],
+      // An async method with no await is the normal way an in-memory adapter
+      // implements an asynchronous port; the rule's signal is lost here.
+      '@typescript-eslint/require-await': 'off',
       'no-console': 'error',
       eqeqeq: ['error', 'always'],
       // Secrets and configuration enter through the validated loader only

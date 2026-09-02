@@ -170,7 +170,9 @@ module.exports = {
       mainFields: ['module', 'main', 'types'],
       extensions: ['.ts', '.js', '.cjs', '.mjs', '.json'],
     },
-    exclude: { path: ['node_modules', '/dist/', 'coverage'] },
+    // Unit tests legitimately wire adapters to use cases; the layer rules
+    // govern production modules only.
+    exclude: { path: ['node_modules', '/dist/', 'coverage', '\\.test\\.ts$'] },
     reporterOptions: {
       text: { highlightFocused: true },
     },
