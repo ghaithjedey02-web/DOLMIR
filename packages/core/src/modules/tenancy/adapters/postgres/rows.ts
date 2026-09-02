@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 import { InternalError, validationErrorFromZod } from '../../../../kernel/errors.js';
 import { OrganizationIdSchema, UserIdSchema } from '../../../../kernel/ids.js';
-import { type Membership, MembershipSchema, RoleKeySchema } from '../../domain/membership.js';
+import { RoleKeySchema } from '../../../../kernel/tenant.js';
+import { type Membership, MembershipSchema } from '../../domain/membership.js';
 import { type Organization, OrganizationSchema } from '../../domain/organization.js';
 import { type User, UserSchema } from '../../domain/user.js';
 

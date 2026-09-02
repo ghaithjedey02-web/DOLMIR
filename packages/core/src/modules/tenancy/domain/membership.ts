@@ -1,15 +1,7 @@
 import { z } from 'zod';
 
 import { OrganizationIdSchema, UserIdSchema } from '../../../kernel/ids.js';
-
-/**
- * Role keys are data owned by tenancy; the access module maps each key to a
- * permission set. Adding a role means a migration (the CHECK constraint) and
- * a permission set — never a schema redesign.
- */
-export const ROLE_KEYS = ['owner', 'admin', 'operator', 'viewer'] as const;
-export const RoleKeySchema = z.enum(ROLE_KEYS);
-export type RoleKey = z.infer<typeof RoleKeySchema>;
+import { RoleKeySchema } from '../../../kernel/tenant.js';
 
 export const MembershipStatus = { ACTIVE: 'active', REVOKED: 'revoked' } as const;
 export const MembershipStatusSchema = z.enum(['active', 'revoked']);

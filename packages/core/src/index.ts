@@ -6,3 +6,5 @@
 export * from './kernel/index.js';
 export * from './infrastructure/index.js';
 export * from './modules/tenancy/index.js';
+export * from './modules/identity/index.js';
+export * from './modules/access/index.js';

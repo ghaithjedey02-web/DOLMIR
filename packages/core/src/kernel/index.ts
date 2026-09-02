@@ -10,3 +10,4 @@ export * from './context.js';
 export * from './logger.js';
 export * from './telemetry.js';
 export type * from './scope.js';
+export * from './tenant.js';

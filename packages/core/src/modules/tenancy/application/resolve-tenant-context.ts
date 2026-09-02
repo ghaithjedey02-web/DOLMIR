@@ -2,7 +2,7 @@ import { ForbiddenError } from '../../../kernel/errors.js';
 import type { OrganizationId } from '../../../kernel/ids.js';
 import { err, ok, type Result } from '../../../kernel/result.js';
 import type { TransactionRunner } from '../../../kernel/scope.js';
-import type { TenantContext } from '../domain/tenant-context.js';
+import type { TenantContext } from '../../../kernel/tenant.js';
 import type { MembershipRepository, OrganizationRepository, UserRepository } from './ports.js';
 
 /**
