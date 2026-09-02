@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.turbo/
+
+# Environment and secrets — never committed (Directive §18)
+.env
+.env.*
+!.env.example
+
+# Local data
+.dolmir/
+*.log
+*.sqlite3
+
+# Tooling caches
+.eslintcache
+.vitest/
+.dependency-cruiser-cache/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

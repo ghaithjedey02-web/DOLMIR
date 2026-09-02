@@ -29,4 +29,4 @@ Architecture is enforced in CI (dependency rules, SQL invariants, contract suite
 
 ## Repository history
 
-Branch `claude/dolmir-project-foundation-vlh863` (PR #1) holds an earlier, unrelated project that shared the name — an AI-native *Trader Operating System* in Python. It is historical context only and is not part of this product (see [ADR-0008](docs/architecture/adr/0008-historical-trader-os-branch.md)).
+Branch `claude/dolmir-project-foundation-vlh863` (PR #1) holds an earlier, unrelated project that shared the name — an AI-native _Trader Operating System_ in Python. It is historical context only and is not part of this product (see [ADR-0008](docs/architecture/adr/0008-historical-trader-os-branch.md)).

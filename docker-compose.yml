@@ -1,0 +1,28 @@
+# Local development infrastructure. Only what the code actually needs today:
+# one PostgreSQL 16 instance. No queue, no cache, no vector store (ADR-0003).
+#
+#   docker compose up -d db
+#   pnpm db:migrate
+#
+# The database, roles and passwords below are for LOCAL DEVELOPMENT ONLY.
+services:
+  db:
+    image: postgres:16
+    container_name: dolmir-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dolmir
+    ports:
+      - '5432:5432'
+    volumes:
+      - dolmir-db-data:/var/lib/postgresql/data
+      - ./supabase/bootstrap:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d dolmir']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  dolmir-db-data:

@@ -1,0 +1,91 @@
+# DOLMIR CI — the merge gate. Architecture rules, types, lint, format and tests
+# all fail the build (Directive §21). Integration tests run against a real
+# PostgreSQL 16 so tenant isolation (RLS) is proven on every push.
+name: CI
+
+on:
+  push:
+    branches: ['main', 'claude/**']
+  pull_request:
+    branches: ['main']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: types · lint · format · architecture · unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm depcruise
+      - run: pnpm test:unit
+
+  integration:
+    name: integration · contract · architecture (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dolmir
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dolmir"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DOLMIR_TEST_DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/dolmir
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+
+  security:
+    name: secrets · dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scanning (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Dependency audit (production, critical)
+        run: pnpm audit --prod --audit-level=critical

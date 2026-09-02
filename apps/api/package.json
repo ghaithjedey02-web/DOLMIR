@@ -1,0 +1,22 @@
+{
+  "name": "@dolmir/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DOLMIR HTTP delivery adapter, CLI and composition root.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": {
+    "dolmir": "./dist/cli/main.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx watch --conditions=development src/main.ts",
+    "start": "node dist/main.js",
+    "cli": "tsx --conditions=development src/cli/main.ts"
+  },
+  "dependencies": {
+    "@dolmir/core": "workspace:*",
+    "fastify": "5.12.1",
+    "zod": "4.5.4"
+  }
+}

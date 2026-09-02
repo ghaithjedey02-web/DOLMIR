@@ -22,7 +22,7 @@ Architecture decisions are recorded as numbered Markdown files under `docs/archi
 
 Rules:
 
-1. A decision is *material* when reversing it later would require changing more than one module, a database schema, a security boundary, an external contract, or the runtime.
+1. A decision is _material_ when reversing it later would require changing more than one module, a database schema, a security boundary, an external contract, or the runtime.
 2. ADRs are never edited to change a decision; a new ADR supersedes the old one and both link to each other. Typos and clarifications may be fixed in place.
 3. A contradiction between a current document and this repository's implementation is resolved by an ADR, never silently (Directive §25).
 4. Status `Proposed` means the decision is implemented on a branch and awaits the product owner's review; `Accepted` means reviewed and merged.
@@ -39,4 +39,4 @@ The template forces the "why" and the alternatives to be written down, which is 
 ## Consequences
 
 - Every pull request that changes a boundary, a schema, a port or a dependency direction includes or updates an ADR.
-- The ADR index is the entry point for understanding *why* the system is shaped as it is.
+- The ADR index is the entry point for understanding _why_ the system is shaped as it is.

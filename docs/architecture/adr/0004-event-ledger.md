@@ -4,7 +4,7 @@
 
 ## Context
 
-Directive §3 (law 1) and §12: DOLMIR must be able to explain *why* it believes a current state ("60 m available") by pointing at the events and sources that produced it, must distinguish `acquistato`, `documentato`, `ricevuto`, `disponibile`, and must be able to treat a divergence between its own event-derived view and the ERP as a finding. A mutable `stock = 15` row cannot do any of that.
+Directive §3 (law 1) and §12: DOLMIR must be able to explain _why_ it believes a current state ("60 m available") by pointing at the events and sources that produced it, must distinguish `acquistato`, `documentato`, `ricevuto`, `disponibile`, and must be able to treat a divergence between its own event-derived view and the ERP as a finding. A mutable `stock = 15` row cannot do any of that.
 
 ## Decision
 
@@ -21,7 +21,7 @@ Traceability and explainability are product requirements, not nice-to-haves. App
 
 ## Alternatives considered
 
-- Mutable entity tables with an audit trail — the trail explains *changes*, not *beliefs*; conflicts between sources cannot be represented.
+- Mutable entity tables with an audit trail — the trail explains _changes_, not _beliefs_; conflicts between sources cannot be represented.
 - A dedicated event-store product (EventStoreDB, Kafka) — operational weight far beyond a modular monolith's needs; PostgreSQL gives transactions, RLS and the ledger in one place.
 - Full transactional outbox and relay in Phase 0 — unnecessary for a single process; the outbox pattern is added when a second process consumes events.
 

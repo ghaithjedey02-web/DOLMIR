@@ -18,7 +18,7 @@ Evidence gathered during discovery:
 ## Decision
 
 1. The DOLMIR platform is a **TypeScript / Node.js 22 LTS** modular monolith managed with **pnpm workspaces**, strict TypeScript, ESLint (type-aware) and Prettier, Vitest for tests.
-2. **Python is permitted, not banned**, for future *bounded, stateless worker services* behind ports (`DocumentTextExtractorPort`, evaluation tooling) when one of these triggers is met: native text extraction is insufficient for a paying client's documents and a Python library materially outperforms the TypeScript options; evaluation datasets need statistical tooling beyond simple scoring; a data-processing job cannot meet its latency or cost target in Node.
+2. **Python is permitted, not banned**, for future _bounded, stateless worker services_ behind ports (`DocumentTextExtractorPort`, evaluation tooling) when one of these triggers is met: native text extraction is insufficient for a paying client's documents and a Python library materially outperforms the TypeScript options; evaluation datasets need statistical tooling beyond simple scoring; a data-processing job cannot meet its latency or cost target in Node.
 3. A Python worker never accesses the database directly; it exchanges typed payloads with the core over an explicit contract, so the LLM boundary and tenant isolation remain enforced in one place.
 
 ## Why
