@@ -1,6 +1,6 @@
 # ADR-0004 — Operational facts live in an append-only event ledger; state is projected
 
-**Status:** Proposed · **Date:** 2026-09-02
+**Status:** Accepted 2026-09-03 (implemented: `ledger_events`, `EventLedger`, `ProjectionRunner`, append-only enforcement tested) · **Date:** 2026-09-02
 
 ## Context
 

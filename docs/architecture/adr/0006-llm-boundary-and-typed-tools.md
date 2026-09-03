@@ -1,6 +1,6 @@
 # ADR-0006 — LLM boundary: provider port, typed tools, no direct data access
 
-**Status:** Proposed · **Date:** 2026-09-02
+**Status:** Accepted 2026-09-03 (implemented in `packages/core/src/ai`; extended by ADR-0011 action policy levels) · **Date:** 2026-09-02
 
 ## Context
 

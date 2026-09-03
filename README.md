@@ -22,7 +22,18 @@ See [ADR-0010](docs/architecture/adr/0010-product-layering-core-platform-systems
 
 ## Status
 
-**Phase 1 — Core foundation** (the plan's "Phase 0"). This repository holds the platform: multi-tenant backend, data foundation, AI layer, audit, event ledger. The public website (dolmir.com) lives in a separate repository and is not changed here.
+**Phase 1 — Core foundation: complete** (the plan's "Phase 0", 2026-09-03). This repository holds the platform: multi-tenant backend with forced Row-Level Security, fail-fast configuration, JWT authentication and a role matrix, append-only audit log and event ledger, object storage, the AI layer (provider port, Anthropic adapter, cost tracking, typed tools with action policy), a Fastify API with health, identity and tenant routes, and an operator CLI. Next: the first end-to-end AI System, Commercial Inbox Intelligence (see the alignment document). The public website (dolmir.com) lives in a separate repository and is not changed here.
+
+## Getting started
+
+```bash
+docker compose up -d db          # PostgreSQL 16 with the two roles
+pnpm install && cp .env.example .env
+pnpm db:migrate && pnpm doctor
+pnpm dev                         # API on http://127.0.0.1:3000
+```
+
+Full instructions, commands and conventions: [`docs/development.md`](docs/development.md).
 
 - Alignment with the Product Master Direction: [`docs/plans/PRODUCT_DIRECTION_ALIGNMENT.md`](docs/plans/PRODUCT_DIRECTION_ALIGNMENT.md)
 - Foundation plan: [`docs/plans/FOUNDATION_IMPLEMENTATION_PLAN.md`](docs/plans/FOUNDATION_IMPLEMENTATION_PLAN.md)

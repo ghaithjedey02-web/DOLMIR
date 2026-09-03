@@ -1,6 +1,6 @@
 # ADR-0003 — Modular monolith with Clean Architecture boundaries enforced in CI
 
-**Status:** Proposed · **Date:** 2026-09-02
+**Status:** Accepted 2026-09-03 (implemented; boundaries enforced by dependency-cruiser and ESLint in CI) · **Date:** 2026-09-02
 
 ## Context
 

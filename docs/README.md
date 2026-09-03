@@ -2,12 +2,18 @@
 
 Nothing here is code. Everything here is knowledge — kept current with the implementation, never ahead of it.
 
-| Path                                                                                 | Contents                                                                                                                               |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| [`plans/PRODUCT_DIRECTION_ALIGNMENT.md`](plans/PRODUCT_DIRECTION_ALIGNMENT.md)       | Mapping of the implementation against the Product Master Direction: keep/modify/defer table, minimum changes, roadmap, first AI System |
-| [`plans/FOUNDATION_IMPLEMENTATION_PLAN.md`](plans/FOUNDATION_IMPLEMENTATION_PLAN.md) | Phase 0 discovery, target architecture, sequence, risks, open decisions, acceptance criteria                                           |
-| [`architecture/adr/`](architecture/adr/)                                             | Architecture Decision Records (one file per material decision)                                                                         |
-| `architecture/`                                                                      | Architecture overview, data model, AI architecture, integration architecture _(written as the corresponding code lands)_               |
-| `development.md` · `deployment.md` · `security.md` · `testing.md`                    | Operating documents _(written as the corresponding code lands)_                                                                        |
+| Path                                                                                   | Contents                                                                                                                               |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [`plans/PRODUCT_DIRECTION_ALIGNMENT.md`](plans/PRODUCT_DIRECTION_ALIGNMENT.md)         | Mapping of the implementation against the Product Master Direction: keep/modify/defer table, minimum changes, roadmap, first AI System |
+| [`plans/FOUNDATION_IMPLEMENTATION_PLAN.md`](plans/FOUNDATION_IMPLEMENTATION_PLAN.md)   | Phase 0 discovery, target architecture, sequence, risks, open decisions, acceptance criteria (with completion status)                  |
+| [`architecture/overview.md`](architecture/overview.md)                                 | Layers, module graph, the four laws and where each is enforced, request lifecycle, what exists and what deliberately does not          |
+| [`architecture/data-model.md`](architecture/data-model.md)                             | Tables, RLS and append-only conventions, ledger semantics, cost queries, reserved tables                                               |
+| [`architecture/ai-architecture.md`](architecture/ai-architecture.md)                   | Provider port, adapters, recorded exchanges, typed tools, action policy, cost book                                                     |
+| [`architecture/integration-architecture.md`](architecture/integration-architecture.md) | Connector abstraction, machine callers, boundaries with n8n and external systems                                                       |
+| [`architecture/adr/`](architecture/adr/)                                               | Architecture Decision Records (one file per material decision)                                                                         |
+| [`development.md`](development.md)                                                     | Prerequisites, first run, everyday commands, conventions CI enforces, adding a tool                                                    |
+| [`deployment.md`](deployment.md)                                                       | Runtime requirements, configuration, release steps, Supabase compatibility, observability                                              |
+| [`security.md`](security.md)                                                           | Requirement → implementation → evidence table; what is scheduled                                                                       |
+| [`testing.md`](testing.md)                                                             | Test projects, running them, recorded exchanges, what a change must come with                                                          |
 
 Evidence labels used across documents: **[CONFIRMED]** · **[HYPOTHESIS]** · **[UNKNOWN]**. A number, date or business fact without a source is not written down.

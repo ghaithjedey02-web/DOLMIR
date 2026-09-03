@@ -1,6 +1,6 @@
 # ADR-0002 — Runtime and stack: TypeScript core, Python reserved for bounded workers
 
-**Status:** Proposed (implementation proceeds on this decision; product owner may veto before merge) · **Date:** 2026-09-02
+**Status:** Accepted 2026-09-03 — Phase 1 implemented in TypeScript; the Product Master Direction §16 names TypeScript/Node/Fastify/PostgreSQL as the default stack and reserves Python for workloads where it is clearly superior, which is this decision · **Date:** 2026-09-02
 
 ## Context
 

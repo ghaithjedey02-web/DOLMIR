@@ -1,6 +1,6 @@
 # DOLMIR — Foundation Implementation Plan (Phase 0)
 
-**Status:** Proposed for review · **Date:** 2026-09-02 · **Repository:** `ghaithjedey02-web/DOLMIR`
+**Status:** Phase 0 implemented (steps 0–13 complete on 2026-09-03; acceptance status in §T) · **Date:** 2026-09-02 · **Repository:** `ghaithjedey02-web/DOLMIR`
 **Working branch:** `claude/dolmir-foundation-architecture-784tn2` (see Open Decision OD-1 on the branch name)
 
 > **Amended 2026-09-02** by the Product Master Direction. The product framing (§P first workflow, the material-intelligence emphasis in §G) is superseded by [`PRODUCT_DIRECTION_ALIGNMENT.md`](PRODUCT_DIRECTION_ALIGNMENT.md); the technical foundation, laws, sequence and acceptance criteria stand. Step 11 additionally delivers action policy levels for tools (ADR-0011).
@@ -272,16 +272,16 @@ Each step is one or two commits, each leaving CI green.
 
 ## T. Acceptance criteria (Definition of Done for Phase 0)
 
-- [ ] `pnpm install && pnpm check` (typecheck, lint, format, architecture) passes locally and in CI.
-- [ ] `pnpm db:migrate` applies all migrations to a fresh PostgreSQL 16; `pnpm doctor` reports configuration valid, database reachable, runtime role cannot bypass RLS, migrations current.
-- [ ] Invalid configuration (missing required value, unknown `DOLMIR_*` variable) fails boot with a legible list of problems.
-- [ ] RLS tests prove: cross-tenant reads return nothing, cross-tenant writes fail, no-tenant transactions see nothing; the SQL architecture test proves every tenant table has forced RLS and a policy.
-- [ ] Append-only tests prove `UPDATE`/`DELETE` are impossible for the runtime role on `audit_log`, `ledger_events`, `ai_usage`.
-- [ ] A JWT from the configured issuer resolves to a `Principal`, membership resolution yields a `TenantContext`, and a permission check denies an unauthorised action with a problem-details response.
-- [ ] Ledger tests prove optimistic concurrency, idempotency and projection rebuild from events with provenance present on every event.
-- [ ] The Anthropic adapter passes the LLM contract suite from recorded exchanges with no key; the fake provider passes the same suite; a recorded call produces an `ai_usage` row with tenant, model, operation, tokens and estimated cost.
-- [ ] A tool executed through the tool executor is permission-checked, schema-validated and audited; `declare_non_determinato` yields a structured `NON_DETERMINATO` result.
-- [ ] The API boots, `/health/live` and `/health/ready` respond, `/v1/me` and a tenant-scoped route work end-to-end in an integration test.
-- [ ] Structured logs carry request, correlation and tenant ids; secrets and PII are redacted in tests.
-- [ ] `docs/` contains architecture, development, deployment, security, data-model, AI architecture, integration architecture, testing, and ADRs for every material decision.
-- [ ] The first vertical slice can be started by adding modules and migrations, without changing kernel, tenancy, ledger, audit or AI layer contracts.
+- [x] `pnpm install && pnpm check` (typecheck, lint, format, architecture) passes locally and in CI (GitHub Actions runs 22–27 green on the branch).
+- [x] `pnpm db:migrate` applies all migrations to a fresh PostgreSQL 16; `pnpm doctor` reports configuration valid, database reachable, runtime role cannot bypass RLS, migrations current (verified manually on 2026-09-03 against a fresh local database; `not_migrated` is reported distinctly before the first migration).
+- [x] Invalid configuration (missing required value, unknown `DOLMIR_*` variable) fails boot with a legible list of problems (`load-config.test.ts`; `main.ts` prints the list and exits 1).
+- [x] RLS tests prove: cross-tenant reads return nothing, cross-tenant writes fail, no-tenant transactions see nothing; the SQL architecture test proves every tenant table has forced RLS and a policy.
+- [x] Append-only tests prove `UPDATE`/`DELETE` are impossible for the runtime role on `audit_log`, `ledger_events`, `ai_usage` (and refused for the owner by trigger).
+- [x] A JWT from the configured issuer resolves to a `Principal`, membership resolution yields a `TenantContext`, and a permission check denies an unauthorised action with a problem-details response (`tests/e2e/api.test.ts`).
+- [x] Ledger tests prove optimistic concurrency, idempotency and projection rebuild from events with provenance present on every event.
+- [x] The Anthropic adapter passes the LLM contract suite from replayed exchanges with no key; the fake provider passes the same suite; a recorded call produces an `ai_usage` row with tenant, model, operation, tokens and estimated cost. **Honesty note:** the cassettes are synthesised from the SDK's response schema (no API key was available); a recording mode re-records the success scenarios when `DOLMIR_TEST_ANTHROPIC_API_KEY` is set. The wire format is therefore unverified against the live API.
+- [x] A tool executed through the tool executor is permission-checked, schema-validated, policy-checked (ADR-0011) and audited; `declare_non_determinato` yields a structured `NON_DETERMINATO` result.
+- [x] The API boots, `/health/live` and `/health/ready` respond, `/v1/me` and tenant-scoped routes work end-to-end in `tests/e2e/api.test.ts` and in a manual boot against a local database.
+- [x] Structured logs carry request, correlation, tenant and actor ids; secrets and PII are redacted in tests and absent from the manual boot log.
+- [x] `docs/` contains architecture overview, data model, AI architecture, integration architecture, development, deployment, security, testing, and ADR-0001…0011.
+- [x] The first AI System (Commercial Inbox Intelligence, `PRODUCT_DIRECTION_ALIGNMENT.md` §7) can be started by adding modules, packages and migrations without changing kernel, tenancy, ledger, audit or AI layer contracts. Known gaps it must add: persisted approvals, per-tenant policy overrides, connectors, jobs, the agent loop.

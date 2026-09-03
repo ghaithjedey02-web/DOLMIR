@@ -1,6 +1,6 @@
 # ADR-0005 — Tenant isolation enforced by forced PostgreSQL Row-Level Security
 
-**Status:** Proposed · **Date:** 2026-09-02
+**Status:** Accepted 2026-09-03 (implemented: forced RLS on every tenant table, transaction-local scopes, isolation and SQL-invariant tests) · **Date:** 2026-09-02
 
 ## Context
 

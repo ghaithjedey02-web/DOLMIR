@@ -1,6 +1,6 @@
 # ADR-0007 — Epistemic status tagging and NON_DETERMINATO as a first-class result
 
-**Status:** Proposed · **Date:** 2026-09-02
+**Status:** Accepted 2026-09-03 (implemented in the kernel and the `declare_non_determinato` tool) · **Date:** 2026-09-02
 
 ## Context
 
