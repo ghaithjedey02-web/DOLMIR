@@ -11,4 +11,5 @@ export * from './logger.js';
 export * from './telemetry.js';
 export type * from './scope.js';
 export * from './tenant.js';
+export * from './source-kind.js';
 export * from './object-storage.js';

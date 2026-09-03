@@ -25,6 +25,15 @@ export type RequestId = z.infer<typeof RequestIdSchema>;
 export const CorrelationIdSchema = z.uuid().brand<'CorrelationId'>();
 export type CorrelationId = z.infer<typeof CorrelationIdSchema>;
 
+export const DocumentIdSchema = z.uuid().brand<'DocumentId'>();
+export type DocumentId = z.infer<typeof DocumentIdSchema>;
+
+export const EntityIdSchema = z.uuid().brand<'EntityId'>();
+export type EntityId = z.infer<typeof EntityIdSchema>;
+
+export const CaseIdSchema = z.uuid().brand<'CaseId'>();
+export type CaseId = z.infer<typeof CaseIdSchema>;
+
 export function newUuid(): Uuid {
   return randomUUID();
 }
@@ -43,6 +52,18 @@ export function newRequestId(): RequestId {
 
 export function newCorrelationId(): CorrelationId {
   return CorrelationIdSchema.parse(randomUUID());
+}
+
+export function newDocumentId(): DocumentId {
+  return DocumentIdSchema.parse(randomUUID());
+}
+
+export function newEntityId(): EntityId {
+  return EntityIdSchema.parse(randomUUID());
+}
+
+export function newCaseId(): CaseId {
+  return CaseIdSchema.parse(randomUUID());
 }
 
 /** Validates an untrusted value against an id schema, failing as a value. */

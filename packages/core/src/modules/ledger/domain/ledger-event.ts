@@ -2,30 +2,13 @@ import { z } from 'zod';
 
 import { ActorSchema } from '../../../kernel/context.js';
 import { CorrelationIdSchema, OrganizationIdSchema, UuidSchema } from '../../../kernel/ids.js';
+import { SourceKindSchema } from '../../../kernel/source-kind.js';
 
 /**
  * The event ledger's vocabulary (ADR-0004). Every event says where the fact
  * came from (`provenance`); a fact without provenance is unconstructible.
+ * `SourceKind` itself lives in the kernel, shared with ingested documents.
  */
-export const SourceKind = {
-  DOCUMENT: 'DOCUMENT',
-  EMAIL: 'EMAIL',
-  ERP: 'ERP',
-  USER: 'USER',
-  SYSTEM: 'SYSTEM',
-  AI: 'AI',
-  INTEGRATION: 'INTEGRATION',
-} as const;
-export const SourceKindSchema = z.enum([
-  'DOCUMENT',
-  'EMAIL',
-  'ERP',
-  'USER',
-  'SYSTEM',
-  'AI',
-  'INTEGRATION',
-]);
-export type SourceKind = z.infer<typeof SourceKindSchema>;
 
 const nonEmpty = (message: string) => z.string().trim().min(1, message);
 
