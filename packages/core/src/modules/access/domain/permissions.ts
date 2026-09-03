@@ -16,6 +16,10 @@ export const Permission = {
   AI_INVOKE: 'ai:invoke',
   /** Cost and usage reports of the AI layer. */
   AI_USAGE_READ: 'ai_usage:read',
+  /** The company profile, rules, terminology and action policy. */
+  WORKSPACE_MANAGE: 'workspace:manage',
+  /** Customers, suppliers, contacts and products. */
+  ENTITIES_MANAGE: 'entities:manage',
   /** Connections to outside systems, without their credentials. */
   CONNECTIONS_READ: 'connections:read',
   /** Creating, rotating and disabling credential-bearing connections. */
@@ -32,7 +36,7 @@ export const ALL_PERMISSIONS: readonly Permission[] = Object.values(Permission);
  * action. Changing a row is a reviewed change with a version bump; custom
  * per-tenant roles are a later addition behind the same `Authorizer` API.
  */
-export const ROLE_MATRIX_VERSION = 3;
+export const ROLE_MATRIX_VERSION = 4;
 
 export const ROLE_PERMISSIONS: Readonly<Record<RoleKey, ReadonlySet<Permission>>> = {
   owner: new Set(ALL_PERMISSIONS),
@@ -45,6 +49,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleKey, ReadonlySet<Permission>>
     Permission.LEDGER_APPEND,
     Permission.AI_INVOKE,
     Permission.AI_USAGE_READ,
+    Permission.WORKSPACE_MANAGE,
+    Permission.ENTITIES_MANAGE,
     Permission.CONNECTIONS_READ,
     Permission.CONNECTIONS_MANAGE,
     Permission.DECISIONS_APPROVE,
@@ -55,6 +61,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleKey, ReadonlySet<Permission>>
     Permission.LEDGER_READ,
     Permission.LEDGER_APPEND,
     Permission.AI_INVOKE,
+    Permission.ENTITIES_MANAGE,
     Permission.CONNECTIONS_READ,
     Permission.DECISIONS_APPROVE,
   ]),

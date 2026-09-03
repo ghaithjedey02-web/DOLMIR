@@ -1,0 +1,27 @@
+From: "Ufficio Acquisti" <acquisti@officine-rossi.it>
+To: vendite@alfa-meccanica.it
+Subject: RdO 2026-1187 con distinta
+Message-ID: <rdo-2026-1187@officine-rossi.it>
+Date: Thu, 03 Sep 2026 14:02:00 +0200
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="frontiera"
+
+--frontiera
+Content-Type: text/plain; charset=utf-8
+
+Buongiorno,
+
+in allegato la distinta della RdO 2026-1187. Consegna richiesta entro il 30 ottobre.
+
+Cordiali saluti
+Officine Meccaniche Rossi S.r.l.
+
+--frontiera
+Content-Type: text/csv; charset=utf-8
+Content-Disposition: attachment; filename="distinta-1187.csv"
+
+codice;descrizione;quantita
+FL-100;Flangia tornita S355 DN100 PN16;250
+PST-C45-500;Piastra rettificata C45 500x300x20;60
+
+--frontiera--

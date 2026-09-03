@@ -70,6 +70,24 @@ export function parseCsv(
   return ok(records);
 }
 
+/**
+ * CSV rows as entity import rows: an empty cell means "not given", so it is
+ * dropped rather than offered to the schema as an empty string. The use case
+ * still validates every row and names the first that does not fit.
+ */
+export function entityRowsFromCsv(
+  text: string,
+  options: { readonly delimiter?: ',' | ';' } = {},
+): Result<Record<string, string>[], ValidationError> {
+  const parsed = parseCsv(text, options);
+  if (!parsed.ok) return parsed;
+  return ok(
+    parsed.value.map((record) =>
+      Object.fromEntries(Object.entries(record).filter(([, value]) => value.length > 0)),
+    ),
+  );
+}
+
 function detectDelimiter(text: string): ',' | ';' {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
   return (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ';' : ',';

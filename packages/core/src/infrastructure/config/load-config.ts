@@ -123,5 +123,6 @@ function toConfig(env: Env): Config {
       key: env.DOLMIR_SECRETS_KEY === undefined ? undefined : new Secret(env.DOLMIR_SECRETS_KEY),
     },
     jobs: { driver: env.DOLMIR_JOBS_DRIVER, schema: env.DOLMIR_JOBS_SCHEMA },
+    mailbox: { driver: env.DOLMIR_MAILBOX_DRIVER },
   });
 }

@@ -10,6 +10,7 @@ export {
   KNOWN_VARIABLES,
   type LogFormat,
   type LogLevelSetting,
+  type MailboxConfig,
   type SecretsConfig,
   type StorageConfig,
 } from './schema.js';

@@ -5,9 +5,12 @@ import { isDomainError, toDomainError } from '@dolmir/core';
 import type { Container } from '../composition/container.js';
 import { authHook, contextHook, generateRequestId, tenantHook } from './hooks.js';
 import { problemFromDomainError, problemFromStatus } from './problem-details.js';
+import { caseRoutes } from './routes/cases.js';
 import { healthRoutes } from './routes/health.js';
+import { ingestRoutes } from './routes/ingest.js';
 import { meRoutes } from './routes/me.js';
 import { organizationRoutes } from './routes/organizations.js';
+import { workspaceRoutes } from './routes/workspace.js';
 import './request-state.js';
 
 export interface AppOptions {
@@ -78,7 +81,11 @@ export async function buildApp(
           statusCode: problem.status,
         });
       }
-      if (problem.status === 401) void reply.header('www-authenticate', 'Bearer realm="dolmir"');
+      // A route that authenticates differently (the signed ingestion endpoint)
+      // sets its own challenge; bearer is only the default.
+      if (problem.status === 401 && reply.getHeader('www-authenticate') === undefined) {
+        void reply.header('www-authenticate', 'Bearer realm="dolmir"');
+      }
       return reply
         .code(problem.status)
         .type('application/problem+json; charset=utf-8')
@@ -110,6 +117,8 @@ export async function buildApp(
   });
 
   await app.register(healthRoutes(container));
+  // Signature-authenticated, so it sits outside the bearer scope on purpose.
+  await app.register(ingestRoutes(container), { prefix: '/v1/orgs/:orgId/ingest' });
   await app.register(
     async (v1) => {
       v1.addHook('preHandler', authHook(container));
@@ -118,6 +127,8 @@ export async function buildApp(
         async (orgs) => {
           orgs.addHook('preHandler', tenantHook(container));
           await orgs.register(organizationRoutes(container));
+          await orgs.register(caseRoutes(container));
+          await orgs.register(workspaceRoutes(container));
         },
         { prefix: '/orgs/:orgId' },
       );

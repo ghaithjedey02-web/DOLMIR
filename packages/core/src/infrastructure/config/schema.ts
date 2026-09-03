@@ -68,6 +68,13 @@ export const EnvSchema = z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,62}$/, 'must be a lowercase identifier')
       .default('dolmir_jobs'),
+
+    /**
+     * Mailbox provider (ADR-0013). `imap_smtp` talks to a real server; `fake`
+     * keeps messages in memory so the whole chain can be exercised without a
+     * mailbox, and is refused in production.
+     */
+    DOLMIR_MAILBOX_DRIVER: z.enum(['imap_smtp', 'fake']).default('imap_smtp'),
   })
   .superRefine((env, ctx) => {
     if (env.DOLMIR_ENV === 'production' && env.DOLMIR_SECRETS_KEY === undefined) {
@@ -75,6 +82,13 @@ export const EnvSchema = z
         code: 'custom',
         path: ['DOLMIR_SECRETS_KEY'],
         message: 'required in production (connector credentials cannot be stored without it)',
+      });
+    }
+    if (env.DOLMIR_ENV === 'production' && env.DOLMIR_MAILBOX_DRIVER === 'fake') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DOLMIR_MAILBOX_DRIVER'],
+        message: 'the in-memory mailbox is for development only and never sends a real message',
       });
     }
     if (env.DOLMIR_ENV === 'production' && env.DOLMIR_JOBS_DRIVER !== 'pg-boss') {
@@ -156,6 +170,10 @@ export interface JobsConfig {
   readonly schema: string;
 }
 
+export interface MailboxConfig {
+  readonly driver: 'imap_smtp' | 'fake';
+}
+
 export interface Config {
   readonly env: Environment;
   readonly log: { readonly level: LogLevelSetting; readonly format: LogFormat };
@@ -166,4 +184,5 @@ export interface Config {
   readonly ai: AiConfig;
   readonly secrets: SecretsConfig;
   readonly jobs: JobsConfig;
+  readonly mailbox: MailboxConfig;
 }

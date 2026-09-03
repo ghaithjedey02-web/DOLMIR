@@ -14,6 +14,9 @@ importers:
       '@dolmir/core':
         specifier: workspace:*
         version: link:packages/core
+      '@dolmir/system-commercial-inbox':
+        specifier: workspace:*
+        version: link:packages/systems/commercial-inbox
       '@eslint/js':
         specifier: 9.39.5
         version: 9.39.5
@@ -62,6 +65,9 @@ importers:
       '@dolmir/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@dolmir/system-commercial-inbox':
+        specifier: workspace:*
+        version: link:../../packages/systems/commercial-inbox
       fastify:
         specifier: 5.12.1
         version: 5.12.1

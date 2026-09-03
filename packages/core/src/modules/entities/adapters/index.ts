@@ -9,4 +9,4 @@ export {
   nameSimilarity,
   trigramSimilarity,
 } from './memory/in-memory-entity-repositories.js';
-export { parseCsv } from './csv/csv.js';
+export { parseCsv, entityRowsFromCsv } from './csv/csv.js';

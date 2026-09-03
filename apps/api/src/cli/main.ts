@@ -4,6 +4,7 @@ import { Migrator, loadConfig, noopLogger } from '@dolmir/core';
 
 import { type Container, createContainer } from '../composition/container.js';
 import { readEnvironment } from '../composition/env.js';
+import { demoCase, demoCases, demoDecide, demoSeed, demoSend } from './demo.js';
 
 /**
  * Operator commands. Every command validates configuration first and prints
@@ -19,6 +20,13 @@ const USAGE = `usage:
   dolmir doctor
   dolmir dev-token --subject <sub> [--email <e>] [--name <n>] [--ttl-seconds <s>]
   dolmir provision-org --slug <s> --name <n> --owner-subject <sub> [--owner-email <e>] [--owner-name <n>]
+
+  dolmir demo:seed [--slug <s>] [--owner-subject <sub>]
+  dolmir demo:send --org <id> --file <path.eml>
+  dolmir demo:cases --org <id>
+  dolmir demo:case --org <id> --case <id>
+  dolmir demo:approve --org <id> --recommendation <id> --user <id> [--note <text>]
+  dolmir demo:reject  --org <id> --recommendation <id> --user <id> [--note <text>]
 `;
 
 const out = (line: string): void => {
@@ -177,6 +185,76 @@ async function provisionOrg(args: string[]): Promise<void> {
   });
 }
 
+async function demo(command: string, args: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      org: { type: 'string' },
+      file: { type: 'string' },
+      case: { type: 'string' },
+      recommendation: { type: 'string' },
+      user: { type: 'string' },
+      note: { type: 'string' },
+      slug: { type: 'string' },
+      'owner-subject': { type: 'string' },
+    },
+  });
+  const need = (name: string, value: string | undefined): string => {
+    if (value === undefined) {
+      fail(USAGE, 2);
+      throw new Error(`--${name} is required`);
+    }
+    return value;
+  };
+  await withContainer(async (container) => {
+    switch (command) {
+      case 'demo:seed':
+        await demoSeed(
+          container,
+          {
+            slug: values.slug ?? 'alfa',
+            ownerSubject: values['owner-subject'] ?? 'auth|demo-owner',
+          },
+          out,
+        );
+        return;
+      case 'demo:send':
+        await demoSend(
+          container,
+          { organizationId: need('org', values.org), file: need('file', values.file) },
+          out,
+        );
+        return;
+      case 'demo:cases':
+        await demoCases(container, { organizationId: need('org', values.org) }, out);
+        return;
+      case 'demo:case':
+        await demoCase(
+          container,
+          { organizationId: need('org', values.org), caseId: need('case', values.case) },
+          out,
+        );
+        return;
+      case 'demo:approve':
+      case 'demo:reject':
+        await demoDecide(
+          container,
+          {
+            organizationId: need('org', values.org),
+            recommendationId: need('recommendation', values.recommendation),
+            userId: need('user', values.user),
+            decision: command === 'demo:approve' ? 'approved' : 'rejected',
+            note: values.note ?? null,
+          },
+          out,
+        );
+        return;
+      default:
+        fail(USAGE, 2);
+    }
+  });
+}
+
 async function run(argv: string[]): Promise<void> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -191,6 +269,14 @@ async function run(argv: string[]): Promise<void> {
       return;
     case 'provision-org':
       await provisionOrg(rest);
+      return;
+    case 'demo:seed':
+    case 'demo:send':
+    case 'demo:cases':
+    case 'demo:case':
+    case 'demo:approve':
+    case 'demo:reject':
+      await demo(command, rest);
       return;
     case undefined:
     default:
