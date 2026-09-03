@@ -10,7 +10,8 @@
  *   modules: tenancy ← identity ← access ; audit and ledger are leaves usable by all
  *   ai                           ← kernel, access/index, audit/index (adapters may use infrastructure)
  *   infrastructure               ← kernel only
- *   apps/api                     ← packages/core (public entry) only; only tests/e2e imports apps
+ *   packages/systems/<key>       ← packages/core (public entry) only; never apps, never another system's internals
+ *   apps/api                     ← packages/core and packages/systems (public entries) only; only tests/e2e imports apps
  *   vendor SDKs                  ← only inside the adapter that wraps them
  */
 
@@ -116,6 +117,38 @@ module.exports = {
       comment: 'Delivery code depends on the published surface of core, never on its internals.',
       from: { path: '^apps/' },
       to: { path: `^${CORE}/`, pathNot: `^${CORE}/index\\.ts$` },
+    },
+    {
+      name: 'systems-use-core-public-entry-only',
+      severity: 'error',
+      comment:
+        'An AI System (ADR-0012) depends on the published surface of core, never on its internals.',
+      from: { path: '^packages/systems/' },
+      to: { path: `^${CORE}/`, pathNot: `^${CORE}/index\\.ts$` },
+    },
+    {
+      name: 'systems-never-import-each-other-internals-or-apps',
+      severity: 'error',
+      from: { path: '^packages/systems/([^/]+)/' },
+      to: {
+        path: ['^apps/', '^packages/systems/(?!$1/)[^/]+/src/(?!index\\.ts$)'],
+      },
+    },
+    {
+      name: 'apps-use-systems-public-entry-only',
+      severity: 'error',
+      from: { path: '^apps/' },
+      to: {
+        path: '^packages/systems/[^/]+/src/',
+        pathNot: '^packages/systems/[^/]+/src/index\\.ts$',
+      },
+    },
+    {
+      name: 'core-never-imports-systems',
+      severity: 'error',
+      comment: 'Core is generic; systems plug into it, never the reverse.',
+      from: { path: `^${CORE}/` },
+      to: { path: '^packages/systems/' },
     },
     {
       name: 'anthropic-sdk-only-in-its-adapter',
