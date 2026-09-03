@@ -10,3 +10,4 @@ export * from './modules/ledger/index.js';
 export * from './modules/tenancy/index.js';
 export * from './modules/identity/index.js';
 export * from './modules/access/index.js';
+export * from './ai/index.js';

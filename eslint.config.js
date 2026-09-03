@@ -74,6 +74,12 @@ export default tseslint.config(
               message: 'Only packages/core/src/ai/adapters/anthropic may import the vendor SDK.',
             },
           ],
+          patterns: [
+            {
+              group: ['@anthropic-ai/sdk/*'],
+              message: 'Only packages/core/src/ai/adapters/anthropic may import the vendor SDK.',
+            },
+          ],
         },
       ],
     },

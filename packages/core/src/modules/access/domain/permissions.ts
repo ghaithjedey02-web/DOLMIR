@@ -50,3 +50,11 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleKey, ReadonlySet<Permission>>
   ]),
   viewer: new Set([Permission.ORGANIZATION_READ, Permission.MEMBERS_READ, Permission.LEDGER_READ]),
 };
+
+/**
+ * Permissions only a human may exercise (ADR-0011). An AI actor never holds
+ * them, whatever role it acts on behalf of: approval is a human act.
+ */
+export const HUMAN_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set([
+  Permission.DECISIONS_APPROVE,
+]);
