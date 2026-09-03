@@ -8,6 +8,7 @@ export * from './infrastructure/index.js';
 export * from './modules/audit/index.js';
 export * from './modules/ledger/index.js';
 export * from './modules/documents/index.js';
+export * from './modules/entities/index.js';
 export * from './modules/tenancy/index.js';
 export * from './modules/identity/index.js';
 export * from './modules/access/index.js';
