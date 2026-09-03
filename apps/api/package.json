@@ -2,12 +2,22 @@
   "name": "@dolmir/api",
   "version": "0.1.0",
   "private": true,
-  "description": "DOLMIR HTTP delivery adapter, CLI and composition root.",
+  "description": "DOLMIR Business Platform delivery: HTTP API, composition root and CLI.",
   "license": "UNLICENSED",
   "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "bin": {
     "dolmir": "./dist/cli/main.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "dev": "tsx watch --conditions=development src/main.ts",

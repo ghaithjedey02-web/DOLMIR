@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@dolmir/api':
+        specifier: workspace:*
+        version: link:apps/api
       '@dolmir/core':
         specifier: workspace:*
         version: link:packages/core

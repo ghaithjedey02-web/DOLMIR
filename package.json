@@ -2,7 +2,7 @@
   "name": "dolmir",
   "version": "0.1.0",
   "private": true,
-  "description": "DOLMIR — AI-native operational control layer for companies. Platform monorepo.",
+  "description": "DOLMIR \u2014 AI-native operational control layer for companies. Platform monorepo.",
   "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -20,11 +20,16 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm depcruise",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration --project contract --project architecture",
+    "test:integration": "vitest run --project integration --project contract --project architecture --project e2e",
     "test:evals": "vitest run --project evals",
-    "clean": "rm -rf dist packages/*/dist apps/*/dist packages/*/*.tsbuildinfo apps/*/*.tsbuildinfo *.tsbuildinfo"
+    "clean": "rm -rf dist packages/*/dist apps/*/dist packages/*/*.tsbuildinfo apps/*/*.tsbuildinfo *.tsbuildinfo",
+    "dev": "pnpm --filter @dolmir/api dev",
+    "db:migrate": "pnpm --filter @dolmir/api cli migrate",
+    "doctor": "pnpm --filter @dolmir/api cli doctor",
+    "test:e2e": "vitest run --project e2e"
   },
   "devDependencies": {
+    "@dolmir/api": "workspace:*",
     "@dolmir/core": "workspace:*",
     "@eslint/js": "9.39.5",
     "@types/node": "22.20.1",

@@ -11,8 +11,10 @@ export {
   type AppliedMigration,
   loadMigrationFiles,
   type MigrationFile,
+  type MigrationQueryable,
   type MigrationStatus,
   Migrator,
   type MigratorOptions,
+  readMigrationStatus,
 } from './migrator.js';
 export { type DatabaseDiagnostics, diagnoseDatabase } from './diagnostics.js';

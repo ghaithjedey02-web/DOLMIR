@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import pg from 'pg';
+import { z } from 'zod';
 
 import { InfrastructureError, PreconditionFailedError } from '../../kernel/errors.js';
 import type { Logger } from '../../kernel/logger.js';
@@ -42,6 +43,28 @@ export interface MigrationStatus {
   readonly applied: readonly AppliedMigration[];
   readonly pending: readonly MigrationFile[];
   readonly checksumMismatches: readonly { version: string; expected: string; actual: string }[];
+}
+
+/** Anything that can run a text query: a `pg.Pool` or a `pg.Client`. */
+export interface MigrationQueryable {
+  query(text: string): Promise<{ rows: unknown[] }>;
+}
+
+/**
+ * Compares the migration files on disk with `schema_migrations` using any
+ * connection — the runtime role may read the ledger — so readiness checks and
+ * `doctor` can report pending migrations without owner credentials.
+ */
+export async function readMigrationStatus(
+  queryable: MigrationQueryable,
+  directory: string,
+): Promise<MigrationStatus> {
+  const files = await loadMigrationFiles(directory);
+  try {
+    return await computeStatus(queryable, files);
+  } catch (error) {
+    throw translatePgError(error);
+  }
 }
 
 export async function loadMigrationFiles(directory: string): Promise<MigrationFile[]> {
@@ -168,19 +191,29 @@ async function ensureLedgerTable(client: pg.Client): Promise<void> {
   `);
 }
 
-async function computeStatus(client: pg.Client, files: MigrationFile[]): Promise<MigrationStatus> {
-  const result = await client.query<{
-    version: string;
-    name: string;
-    checksum: string;
-    applied_at: Date;
-  }>('SELECT version, name, checksum, applied_at FROM public.schema_migrations ORDER BY version');
-  const applied = result.rows.map((row) => ({
-    version: row.version,
-    name: row.name,
-    checksum: row.checksum,
-    appliedAt: row.applied_at,
-  }));
+const AppliedRowSchema = z.object({
+  version: z.string(),
+  name: z.string(),
+  checksum: z.string(),
+  applied_at: z.date(),
+});
+
+async function computeStatus(
+  queryable: MigrationQueryable,
+  files: MigrationFile[],
+): Promise<MigrationStatus> {
+  const result = await queryable.query(
+    'SELECT version, name, checksum, applied_at FROM public.schema_migrations ORDER BY version',
+  );
+  const applied = result.rows.map((raw) => {
+    const row = AppliedRowSchema.parse(raw);
+    return {
+      version: row.version,
+      name: row.name,
+      checksum: row.checksum,
+      appliedAt: row.applied_at,
+    };
+  });
   const appliedByVersion = new Map(applied.map((row) => [row.version, row]));
   const pending = files.filter((file) => !appliedByVersion.has(file.version));
   const checksumMismatches = files.flatMap((file) => {

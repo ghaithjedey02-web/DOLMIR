@@ -10,7 +10,7 @@
  *   modules: tenancy ← identity ← access ; audit and ledger are leaves usable by all
  *   ai                           ← kernel, access/index, audit/index (adapters may use infrastructure)
  *   infrastructure               ← kernel only
- *   apps/api                     ← packages/core (public entry) only; nothing imports apps
+ *   apps/api                     ← packages/core (public entry) only; only tests/e2e imports apps
  *   vendor SDKs                  ← only inside the adapter that wraps them
  */
 
@@ -104,9 +104,10 @@ module.exports = {
       to: { path: `^${CORE}/(modules|ai)/` },
     },
     {
-      name: 'nothing-imports-apps',
+      name: 'packages-never-import-apps',
       severity: 'error',
-      from: { path: '^(packages|tests)/' },
+      comment: 'Delivery depends on core, never the reverse. End-to-end tests may import apps.',
+      from: { path: '^packages/' },
       to: { path: '^apps/' },
     },
     {

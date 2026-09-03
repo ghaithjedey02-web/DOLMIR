@@ -26,6 +26,7 @@ describe('role matrix', () => {
       owner: [...ALL_PERMISSIONS].sort(),
       admin: [
         'ai:invoke',
+        'ai_usage:read',
         'audit:read',
         'decisions:approve',
         'ledger:append',

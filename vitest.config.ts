@@ -8,6 +8,7 @@ import { defineConfig } from 'vitest/config';
  *   integration   real PostgreSQL (RLS, append-only, ledger, HTTP app)
  *   contract      one suite per port, executed against every adapter
  *   architecture  dependency rules and SQL invariants (a violation fails CI)
+ *   e2e           the HTTP application with injected requests against real PostgreSQL
  *   evals         golden datasets; never a substitute for unit tests
  */
 export default defineConfig({
@@ -57,6 +58,16 @@ export default defineConfig({
           include: ['tests/architecture/**/*.test.ts'],
           fileParallelism: false,
           testTimeout: 60_000,
+          hookTimeout: 60_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'e2e',
+          include: ['tests/e2e/**/*.test.ts'],
+          fileParallelism: false,
+          testTimeout: 30_000,
           hookTimeout: 60_000,
         },
       },

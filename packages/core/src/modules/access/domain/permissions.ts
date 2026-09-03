@@ -14,6 +14,8 @@ export const Permission = {
   LEDGER_READ: 'ledger:read',
   LEDGER_APPEND: 'ledger:append',
   AI_INVOKE: 'ai:invoke',
+  /** Cost and usage reports of the AI layer. */
+  AI_USAGE_READ: 'ai_usage:read',
   /** The human gate: approving or rejecting a proposed action. */
   DECISIONS_APPROVE: 'decisions:approve',
 } as const;
@@ -26,7 +28,7 @@ export const ALL_PERMISSIONS: readonly Permission[] = Object.values(Permission);
  * action. Changing a row is a reviewed change with a version bump; custom
  * per-tenant roles are a later addition behind the same `Authorizer` API.
  */
-export const ROLE_MATRIX_VERSION = 1;
+export const ROLE_MATRIX_VERSION = 2;
 
 export const ROLE_PERMISSIONS: Readonly<Record<RoleKey, ReadonlySet<Permission>>> = {
   owner: new Set(ALL_PERMISSIONS),
@@ -38,6 +40,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<RoleKey, ReadonlySet<Permission>>
     Permission.LEDGER_READ,
     Permission.LEDGER_APPEND,
     Permission.AI_INVOKE,
+    Permission.AI_USAGE_READ,
     Permission.DECISIONS_APPROVE,
   ]),
   operator: new Set([
