@@ -5,7 +5,11 @@ import { Secret } from '../../../infrastructure/config/secret.js';
 import { newOrganizationId } from '../../../kernel/ids.js';
 import { createModelRouting } from '../../llm/model-routing.js';
 import type { LlmRequest } from '../../llm/port.js';
-import { AnthropicLlmProvider, type HttpFetch } from './anthropic-llm-provider.js';
+import {
+  AnthropicLlmProvider,
+  type HttpFetch,
+  supportsAdaptiveThinking,
+} from './anthropic-llm-provider.js';
 
 const tenantId = newOrganizationId();
 const request: LlmRequest = {
@@ -87,10 +91,29 @@ function provider(fetch: HttpFetch): AnthropicLlmProvider {
   });
 }
 
+describe('supportsAdaptiveThinking', () => {
+  it.each([
+    ['claude-opus-5', true],
+    ['claude-sonnet-5', true],
+    ['claude-opus-4-8', true],
+    ['claude-sonnet-4-6', true],
+    ['claude-haiku-4-5', false],
+    ['claude-haiku-4-5-20251001', false],
+    ['claude-sonnet-4-5-20250929', false],
+    ['claude-opus-4-1-20250805', false],
+    ['claude-opus-4-20250514', false],
+    ['claude-3-7-sonnet-20250219', false],
+    // An id from beyond this table keeps the newer shape rather than losing reasoning.
+    ['some-future-model', true],
+  ])('%s -> %s', (model, expected) => {
+    expect(supportsAdaptiveThinking(model)).toBe(expected);
+  });
+});
+
 describe('AnthropicLlmProvider', () => {
   it('sends the routed model, the system prompt, the tenant as metadata and no sampling parameters', async () => {
     const { fetch, calls } = fetchReturning(200, message());
-    const result = await provider(fetch).complete({ ...request, reasoning: 'adaptive' });
+    const result = await provider(fetch).complete(request);
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(1);
     const call = calls[0]!;
@@ -102,11 +125,35 @@ describe('AnthropicLlmProvider', () => {
       max_tokens: 200,
       system: 'Classify the message.',
       messages: [{ role: 'user', content: 'Preventivo per 250 flange tornite.' }],
-      thinking: { type: 'adaptive' },
       metadata: { user_id: tenantId },
     });
     expect(call.body).not.toHaveProperty('temperature');
     expect(call.body).not.toHaveProperty('output_config');
+  });
+
+  it('asks for adaptive thinking only on models that accept it', async () => {
+    const adaptive = fetchReturning(200, message());
+    const older = fetchReturning(200, message());
+    const routed = (fetch: HttpFetch, model: string): AnthropicLlmProvider =>
+      new AnthropicLlmProvider({
+        apiKey: new Secret('test-key'),
+        fetch,
+        maxRetries: 0,
+        routing: createModelRouting({ fast: model }),
+      });
+
+    await routed(adaptive.fetch, 'claude-sonnet-5').complete({ ...request, reasoning: 'adaptive' });
+    await routed(older.fetch, 'claude-haiku-4-5').complete({ ...request, reasoning: 'adaptive' });
+
+    expect(adaptive.calls[0]!.body).toMatchObject({ thinking: { type: 'adaptive' } });
+    // Haiku 4.5 predates adaptive thinking and rejects the parameter outright.
+    expect(older.calls[0]!.body).not.toHaveProperty('thinking');
+  });
+
+  it('disables thinking explicitly when reasoning is refused', async () => {
+    const { fetch, calls } = fetchReturning(200, message());
+    await provider(fetch).complete({ ...request, reasoning: 'none' });
+    expect(calls[0]!.body).toMatchObject({ thinking: { type: 'disabled' } });
   });
 
   it('maps the response: text, usage including cache tokens, model and request id', async () => {

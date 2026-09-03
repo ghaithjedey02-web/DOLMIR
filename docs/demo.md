@@ -37,6 +37,27 @@ echo "DOLMIR_SECRETS_KEY=$(node -e "console.log(require('crypto').randomBytes(32
 
 Every variable is validated at boot. An unknown `DOLMIR_*` name is a boot failure that lists the recognised ones, so a typo never becomes a silent default.
 
+The key is read once, in the configuration loader, and wrapped in a `Secret` whose `toString`, `toJSON` and inspection all print `[redacted]`. It is revealed exactly once, into the Anthropic client. It is never logged, never returned by an endpoint and never written to the database.
+
+`DOLMIR_AI_PROVIDER` decides which provider answers:
+
+| Value       | Provider                                                      |
+| ----------- | ------------------------------------------------------------- |
+| `none`      | every call fails with `LLM_PROVIDER_NOT_CONFIGURED` (default) |
+| `fake`      | the scripted provider used by the tests — never a real model  |
+| `anthropic` | the real API; requires `DOLMIR_AI_ANTHROPIC_API_KEY`          |
+
+### The models this demo calls
+
+A caller names a _tier_, never a model (`packages/core/src/ai/llm/model-routing.ts`). One message costs two calls:
+
+| Step                                    | Tier       | Model by default   | Reasoning                                   |
+| --------------------------------------- | ---------- | ------------------ | ------------------------------------------- |
+| reading the message and its attachments | `standard` | `claude-sonnet-5`  | adaptive thinking                           |
+| writing the reply                       | `fast`     | `claude-haiku-4-5` | none — the model predates adaptive thinking |
+
+Override either with `DOLMIR_AI_MODEL_FAST` / `DOLMIR_AI_MODEL_STANDARD` / `DOLMIR_AI_MODEL_DEEP`. The adapter sends `thinking: {"type":"adaptive"}` only to a model that accepts it, so overriding the fast tier to a current model turns reasoning on there too.
+
 ## 3. Database and schema
 
 ```bash
@@ -115,6 +136,24 @@ curl -s -H "authorization: Bearer $TOKEN" "http://127.0.0.1:3000/v1/orgs/$ORG/do
 
 Or from the command line: `cli demo:cases --org <ORG_ID>` and `cli demo:case --org <ORG_ID> --case <CASE_ID>`.
 
+Every model call is recorded, priced and readable:
+
+```bash
+curl -s -H "authorization: Bearer $TOKEN" "http://127.0.0.1:3000/v1/orgs/$ORG/ai-usage" | jq
+```
+
+Each entry names the `provider`, the `model`, the `tier`, the `operation`, the tokens, the latency and whether the call succeeded — so `"provider": "anthropic"` on `commercial_inbox.understand` and `commercial_inbox.draft_reply` is the proof that a real model answered. The scripted provider records `"provider": "fake"` with a model named `fake-*`, so the two can never be confused.
+
+`estimatedCost` is `0` with `priced: false` for any model absent from the cost book — today `claude-haiku-4-5`, whose price is not written down because it has not been confirmed from the pricing page. The tokens are real; only the estimate is missing, and the report says so rather than guessing.
+
+The audit trail and the event ledger are separate records with separate purposes:
+
+```bash
+curl -s -H "authorization: Bearer $TOKEN" "http://127.0.0.1:3000/v1/orgs/$ORG/audit?limit=50" | jq
+```
+
+The audit trail holds who did what: `organization.provisioned`, `entities.imported`, `workspace.rule_set`, `connection.created`, `mailbox.message_ingested`, `tool.executed`. The ledger holds what happened to the case — `DocumentReceived`, `CaseOpened`, `FindingRecorded`, `RecommendationProposed`, `RecommendationApproved`, `ActionExecuted`, `OutcomeRecorded`, `CaseResolved` — and has no endpoint yet; read it with `select event_type, occurred_at from ledger_events order by occurred_at`.
+
 ## 7. Approve, and watch the reply leave
 
 ```bash
@@ -159,7 +198,7 @@ There is no dashboard yet. The API and the CLI are the whole surface.
 | PostgreSQL, row-level security, ledger, audit                   | real                                       |                                                                        |
 | MIME parsing, text extraction, evidence spans                   | real                                       |                                                                        |
 | Entity resolution, parsers, completeness rules, the draft guard | real, no model involved                    |                                                                        |
-| The two model calls                                             | real, against Anthropic, when a key is set | scripted in every test                                                 |
+| The two model calls                                             | real, against Anthropic, when a key is set | scripted in every test; `ai-usage` names the provider that answered    |
 | Sending a reply                                                 |                                            | in-memory mailbox by default                                           |
 | IMAP and SMTP                                                   | code is real and typed                     | exercised against a fake client only; never run against a live mailbox |
 | Background jobs                                                 | pg-boss adapter written                    | the demo uses the in-memory queue                                      |
@@ -171,6 +210,7 @@ There is no dashboard yet. The API and the CLI are the whole surface.
 - **pg-boss is not exercised end to end.** `dolmir jobs:migrate` does not exist yet, so `DOLMIR_JOBS_DRIVER=pg-boss` is untested; the in-memory queue runs handlers in the same process and loses them on restart.
 - **No retention, deletion or export.** See `privacy.md`; erasure against an immutable ledger is an open decision.
 - **The Anthropic contract tests replay synthesised exchanges**, not recordings of real calls, because no key was available when they were written.
+- **`claude-haiku-4-5` has no price in the cost book**, so the drafting call reports its tokens with `priced: false` and a zero estimate. Adding the price is one entry in `packages/core/src/ai/usage/cost-book.ts` under a new version.
 - **Only Italian and English** are handled well by the date parser and the drafting instructions.
 - **One attachment format family.** PDF and office documents are stored and marked `unsupported`; nothing reads them yet.
 - **The reply is never a quotation.** DOLMIR holds no pricing data, so a draft that mentions a price or a currency is refused by the guard.

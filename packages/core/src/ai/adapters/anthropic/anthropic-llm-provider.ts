@@ -34,6 +34,8 @@ import {
  *   validated here, so an invalid answer becomes a typed BAD_RESPONSE that
  *   still carries the tokens it cost.
  * - No sampling parameters are sent: current models reject `temperature`.
+ * - `reasoning: 'adaptive'` is sent only to models that accept it; see
+ *   `supportsAdaptiveThinking`.
  */
 export type HttpFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -145,7 +147,7 @@ export class AnthropicLlmProvider implements LlmProviderPort {
         content: message.content,
       })),
       ...(request.system === undefined ? {} : { system: request.system }),
-      ...thinkingParam(request.reasoning),
+      ...thinkingParam(request.reasoning, model),
       ...(format === undefined ? {} : { output_config: { format } }),
       ...(request.tenantId === null ? {} : { metadata: { user_id: request.tenantId } }),
     };
@@ -191,6 +193,7 @@ export class AnthropicLlmProvider implements LlmProviderPort {
 
 function thinkingParam(
   reasoning: LlmRequest['reasoning'],
+  model: string,
 ): Pick<Anthropic.MessageCreateParamsNonStreaming, 'thinking'> {
   switch (reasoning) {
     case undefined:
@@ -198,8 +201,31 @@ function thinkingParam(
     case 'none':
       return { thinking: { type: 'disabled' } };
     case 'adaptive':
-      return { thinking: { type: 'adaptive' } };
+      return supportsAdaptiveThinking(model) ? { thinking: { type: 'adaptive' } } : {};
   }
+}
+
+/** `claude-<family>-<major>[-<minor>]`, with a dated suffix (8 digits) that is not a minor. */
+const MODEL_VERSION = /^claude-[a-z]+-(\d+)(?:-(\d{1,2})\b)?/;
+
+/**
+ * Adaptive thinking arrived with the 4.6 generation. A model released before
+ * it rejects `thinking: { type: 'adaptive' }` outright, so asking for reasoning
+ * on one — the `fast` tier routes to Haiku 4.5 by default — must not send the
+ * parameter. The older shape (`enabled` with an explicit budget) is not used
+ * as a substitute: the budget is a caller's decision about cost, not one this
+ * adapter may invent, so the model simply answers without extended reasoning.
+ *
+ * An id this does not recognise is assumed to support it: model ids only move
+ * forward, and a new one must not silently lose reasoning.
+ */
+export function supportsAdaptiveThinking(model: string): boolean {
+  if (model.startsWith('claude-3-')) return false;
+  const match = MODEL_VERSION.exec(model);
+  if (match === null) return true;
+  const major = Number(match[1]);
+  const minor = match[2] === undefined ? 0 : Number(match[2]);
+  return major > 4 || (major === 4 && minor >= 6);
 }
 
 function stopReasonOf(reason: Anthropic.StopReason | null): LlmStopReason {

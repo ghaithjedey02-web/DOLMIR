@@ -265,6 +265,10 @@ export async function draftReply(
         },
       ],
       reasoning: 'adaptive',
+      // The schema allows 7 200 characters of reply; the tier default (1 024)
+      // would truncate a long one, and a truncated answer fails the whole
+      // analysis rather than producing a shorter reply.
+      maxTokens: 4096,
     },
     ReplyDraftSchema,
   );
