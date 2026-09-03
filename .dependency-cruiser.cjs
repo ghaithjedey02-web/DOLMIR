@@ -167,7 +167,27 @@ module.exports = {
           '^tests/',
         ],
       },
-      to: { path: 'node_modules/(pg|pg-[^/]+)/' },
+      to: { path: 'node_modules/(pg|pg-(?!boss/)[^/]+)/' },
+    },
+    {
+      name: 'pg-boss-only-in-jobs-infrastructure',
+      severity: 'error',
+      comment: 'The queue vendor stays behind JobQueuePort (ADR-0014).',
+      from: { pathNot: [`^${CORE}/infrastructure/jobs/`, '^tests/'] },
+      to: { path: 'node_modules/pg-boss/' },
+    },
+    {
+      name: 'mail-libraries-only-in-connector-adapters',
+      severity: 'error',
+      comment: 'IMAP, SMTP and MIME libraries stay behind the connector ports (ADR-0013).',
+      from: {
+        pathNot: [
+          `^${CORE}/modules/connectors/adapters/imap-smtp/`,
+          `^${CORE}/modules/connectors/adapters/mime/`,
+          '^tests/',
+        ],
+      },
+      to: { path: 'node_modules/(imapflow|nodemailer|mailparser)/' },
     },
     {
       name: 'jose-only-in-identity-adapters',

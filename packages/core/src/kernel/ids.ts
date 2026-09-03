@@ -34,6 +34,9 @@ export type EntityId = z.infer<typeof EntityIdSchema>;
 export const CaseIdSchema = z.uuid().brand<'CaseId'>();
 export type CaseId = z.infer<typeof CaseIdSchema>;
 
+export const ConnectionIdSchema = z.uuid().brand<'ConnectionId'>();
+export type ConnectionId = z.infer<typeof ConnectionIdSchema>;
+
 export function newUuid(): Uuid {
   return randomUUID();
 }
@@ -64,6 +67,10 @@ export function newEntityId(): EntityId {
 
 export function newCaseId(): CaseId {
   return CaseIdSchema.parse(randomUUID());
+}
+
+export function newConnectionId(): ConnectionId {
+  return ConnectionIdSchema.parse(randomUUID());
 }
 
 /** Validates an untrusted value against an id schema, failing as a value. */

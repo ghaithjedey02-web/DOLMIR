@@ -73,6 +73,25 @@ export default tseslint.config(
               name: '@anthropic-ai/sdk',
               message: 'Only packages/core/src/ai/adapters/anthropic may import the vendor SDK.',
             },
+            {
+              name: 'pg-boss',
+              message: 'Only packages/core/src/infrastructure/jobs may import the queue vendor.',
+            },
+            {
+              name: 'imapflow',
+              message:
+                'Only packages/core/src/modules/connectors/adapters may import mail libraries.',
+            },
+            {
+              name: 'nodemailer',
+              message:
+                'Only packages/core/src/modules/connectors/adapters may import mail libraries.',
+            },
+            {
+              name: 'mailparser',
+              message:
+                'Only packages/core/src/modules/connectors/adapters may import mail libraries.',
+            },
           ],
           patterns: [
             {
@@ -85,7 +104,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/core/src/ai/adapters/anthropic/**/*.ts'],
+    files: [
+      'packages/core/src/ai/adapters/anthropic/**/*.ts',
+      'packages/core/src/infrastructure/jobs/**/*.ts',
+      'packages/core/src/modules/connectors/adapters/imap-smtp/**/*.ts',
+      'packages/core/src/modules/connectors/adapters/mime/**/*.ts',
+    ],
     rules: { 'no-restricted-imports': 'off' },
   },
   {

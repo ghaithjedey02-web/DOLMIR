@@ -16,6 +16,11 @@ const postgresUrl = z
     message: 'must be a postgres:// or postgresql:// connection URL',
   });
 
+function isBase64Of32Bytes(value: string): boolean {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(value)) return false;
+  return Buffer.from(value, 'base64').byteLength === 32;
+}
+
 export const Environment = z.enum(['development', 'test', 'production']);
 export type Environment = z.infer<typeof Environment>;
 
@@ -48,8 +53,37 @@ export const EnvSchema = z
     DOLMIR_AI_MODEL_FAST: z.string().min(1).optional(),
     DOLMIR_AI_MODEL_STANDARD: z.string().min(1).optional(),
     DOLMIR_AI_MODEL_DEEP: z.string().min(1).optional(),
+
+    /** 32 random bytes, base64: encrypts per-tenant connector credentials (ADR-0013). */
+    DOLMIR_SECRETS_KEY: z
+      .string()
+      .refine((value) => isBase64Of32Bytes(value), {
+        message: 'must be 32 random bytes encoded as base64 (44 characters)',
+      })
+      .optional(),
+
+    /** Background jobs (ADR-0014): pg-boss in production, in-memory for development and tests. */
+    DOLMIR_JOBS_DRIVER: z.enum(['memory', 'pg-boss']).default('memory'),
+    DOLMIR_JOBS_SCHEMA: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,62}$/, 'must be a lowercase identifier')
+      .default('dolmir_jobs'),
   })
   .superRefine((env, ctx) => {
+    if (env.DOLMIR_ENV === 'production' && env.DOLMIR_SECRETS_KEY === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DOLMIR_SECRETS_KEY'],
+        message: 'required in production (connector credentials cannot be stored without it)',
+      });
+    }
+    if (env.DOLMIR_ENV === 'production' && env.DOLMIR_JOBS_DRIVER !== 'pg-boss') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DOLMIR_JOBS_DRIVER'],
+        message: 'must be pg-boss in production (in-memory jobs are lost on restart)',
+      });
+    }
     const hasJwks = env.DOLMIR_AUTH_JWKS_URL !== undefined;
     const hasHs256 = env.DOLMIR_AUTH_HS256_SECRET !== undefined;
     if (hasJwks === hasHs256) {
@@ -112,6 +146,16 @@ export interface AiConfig {
   readonly models: AiModelOverrides;
 }
 
+export interface SecretsConfig {
+  /** Absent only outside production: connector credentials cannot be stored without it. */
+  readonly key: Secret | undefined;
+}
+
+export interface JobsConfig {
+  readonly driver: 'memory' | 'pg-boss';
+  readonly schema: string;
+}
+
 export interface Config {
   readonly env: Environment;
   readonly log: { readonly level: LogLevelSetting; readonly format: LogFormat };
@@ -120,4 +164,6 @@ export interface Config {
   readonly auth: AuthConfig;
   readonly storage: StorageConfig;
   readonly ai: AiConfig;
+  readonly secrets: SecretsConfig;
+  readonly jobs: JobsConfig;
 }

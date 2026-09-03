@@ -18,7 +18,7 @@ const APPEND_ONLY = ['audit_log', 'ledger_events', 'ai_usage', 'company_rules'];
  * Read-model tables derived from immutable ledger events (ADR-0012 §3): the
  * runtime role may only insert into them; the owner clears them on a rebuild.
  */
-const RUNTIME_INSERT_ONLY = ['case_findings', 'approvals', 'actions'];
+const RUNTIME_INSERT_ONLY = ['case_findings', 'approvals', 'actions', 'ingestion_nonces'];
 
 describe('SQL invariants', () => {
   let db: TestDatabase;

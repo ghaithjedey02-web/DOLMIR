@@ -6,9 +6,11 @@ export {
   type Config,
   type DatabaseConfig,
   Environment,
+  type JobsConfig,
   KNOWN_VARIABLES,
   type LogFormat,
   type LogLevelSetting,
+  type SecretsConfig,
   type StorageConfig,
 } from './schema.js';
 export {

@@ -26,7 +26,13 @@ describe('loadConfig', () => {
   });
 
   it('switches to json logs at info level outside development', () => {
-    const result = loadConfig({ ...minimal, DOLMIR_ENV: 'production' });
+    const result = loadConfig({
+      ...minimal,
+      DOLMIR_ENV: 'production',
+      // Production also demands a secrets key and a durable job queue (ADR-0013, ADR-0014).
+      DOLMIR_SECRETS_KEY: Buffer.alloc(32, 3).toString('base64'),
+      DOLMIR_JOBS_DRIVER: 'pg-boss',
+    });
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.log).toEqual({ level: 'info', format: 'json' });
   });
@@ -120,6 +126,33 @@ describe('loadConfig', () => {
     expect(rendered).not.toContain('change-me-please');
     expect(config.ai.anthropic?.apiKey.reveal()).toBe('sk-ant-very-secret');
     expect(config.auth.hs256Secret?.length).toBe(minimal.DOLMIR_AUTH_HS256_SECRET.length);
+  });
+
+  it('accepts a base64 secrets key, rejects a short one, and requires it with pg-boss in production', () => {
+    const key = Buffer.alloc(32, 7).toString('base64');
+    const ok = loadConfig({ ...minimal, DOLMIR_SECRETS_KEY: key, DOLMIR_JOBS_DRIVER: 'pg-boss' });
+    if (!ok.ok) throw new Error(ok.error.message);
+    expect(ok.value.secrets.key?.reveal()).toBe(key);
+    expect(ok.value.jobs).toEqual({ driver: 'pg-boss', schema: 'dolmir_jobs' });
+    expect(String(ok.value.secrets.key)).toBe('[secret]');
+
+    const short = loadConfig({ ...minimal, DOLMIR_SECRETS_KEY: 'dG9vLXNob3J0' });
+    expect(short.ok).toBe(false);
+    if (!short.ok) expect(short.error.message).toContain('DOLMIR_SECRETS_KEY');
+
+    const production = loadConfig({ ...minimal, DOLMIR_ENV: 'production' });
+    expect(production.ok).toBe(false);
+    if (!production.ok) {
+      const problems = production.error.details['problems'] as { variable: string }[];
+      expect(problems.map((p) => p.variable).sort()).toEqual([
+        'DOLMIR_JOBS_DRIVER',
+        'DOLMIR_SECRETS_KEY',
+      ]);
+    }
+    const defaults = loadConfig(minimal);
+    if (!defaults.ok) throw new Error(defaults.error.message);
+    expect(defaults.value.secrets.key).toBeUndefined();
+    expect(defaults.value.jobs.driver).toBe('memory');
   });
 
   it('returns a frozen configuration object', () => {
