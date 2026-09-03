@@ -12,9 +12,21 @@
   "include": [
     "packages/*/src/**/*.test.ts",
     "packages/*/src/**/__fixtures__/**/*.ts",
+    "packages/systems/*/src/**/*.test.ts",
+    "packages/systems/*/src/**/__fixtures__/**/*.ts",
     "apps/*/src/**/*.test.ts",
     "tests/**/*.ts",
     "vitest.config.ts"
   ],
-  "references": [{ "path": "packages/core" }, { "path": "apps/api" }]
+  "references": [
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/systems/commercial-inbox"
+    },
+    {
+      "path": "apps/api"
+    }
+  ]
 }

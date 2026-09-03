@@ -1,0 +1,26 @@
+{
+  "name": "@dolmir/system-commercial-inbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DOLMIR AI System: understanding, evidence and recommendations for inbound commercial e-mail.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@dolmir/core": "workspace:*",
+    "zod": "4.5.4"
+  }
+}

@@ -112,6 +112,15 @@ importers:
         specifier: 13.1.3
         version: 13.1.3
 
+  packages/systems/commercial-inbox:
+    dependencies:
+      '@dolmir/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
+
 packages:
 
   '@anthropic-ai/sdk@0.123.0':

@@ -17,7 +17,7 @@ export default defineConfig({
     reporters: process.env['CI'] ? ['default', 'github-actions'] : ['default'],
     coverage: {
       provider: 'v8',
-      include: ['packages/*/src/**', 'apps/*/src/**'],
+      include: ['packages/*/src/**', 'packages/systems/*/src/**', 'apps/*/src/**'],
       exclude: ['**/*.test.ts', '**/__fixtures__/**', '**/index.ts'],
       reportsDirectory: 'coverage',
     },
@@ -26,7 +26,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['packages/*/src/**/*.test.ts', 'apps/*/src/**/*.test.ts'],
+          include: [
+            'packages/*/src/**/*.test.ts',
+            'packages/systems/*/src/**/*.test.ts',
+            'apps/*/src/**/*.test.ts',
+          ],
         },
       },
       {
