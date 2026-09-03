@@ -28,6 +28,15 @@ export {
   type ManageConnectionsDependencies,
   type NewConnectionInput,
 } from './manage-connections.js';
+export {
+  SEND_MAILBOX_REPLY_TOOL,
+  type SendMailboxReplyDependencies,
+  type SendMailboxReplyInput,
+  SendMailboxReplyInputSchema,
+  type SendMailboxReplyOutput,
+  SendMailboxReplyOutputSchema,
+  createSendMailboxReplyTool,
+} from './send-mailbox-reply-tool.js';
 export { PollMailbox, type PollMailboxDependencies, type PollReport } from './poll-mailbox.js';
 export type {
   AnalysisScheduler,

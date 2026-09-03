@@ -36,6 +36,7 @@ import {
 } from '../domain/case.js';
 import { CASE_STREAM_TYPE, CaseEventType, CaseResolution } from '../domain/case-events.js';
 import type { CaseProjection } from './case-projection.js';
+import type { EvidenceVerifier } from './evidence-verifier.js';
 import type { CaseRepository } from './ports.js';
 
 /**
@@ -57,6 +58,12 @@ export interface CaseEngineDependencies {
   readonly authorizer: Authorizer;
   /** To run an approved action with the approver's own permissions. */
   readonly memberships: MembershipRepository;
+  /**
+   * Checks cited document spans before a case is stored. Optional so a
+   * deployment can run without it, but every real one wires it: without it a
+   * system could store a citation that does not exist.
+   */
+  readonly evidence?: EvidenceVerifier;
   readonly clock: Clock;
   readonly logger?: Logger;
   /** Role whose permissions AUTO_EXECUTE recommendations run with. Default `operator`. */
@@ -110,6 +117,8 @@ export class CaseEngine {
     const draft = parsed.data;
     const prepared = await this.prepareRecommendations(tenantId, draft);
     if (!prepared.ok) return err(prepared.error);
+    const evidence = await this.verifyEvidence(tenantId, draft);
+    if (!evidence.ok) return err(evidence.error);
 
     const caseId = newCaseId();
     const now = this.deps.clock.now();
@@ -454,6 +463,50 @@ export class CaseEngine {
     const approvals = await this.deps.cases.listApprovals(scope, caseId);
     const actions = await this.deps.cases.listActions(scope, caseId);
     return { case: current, findings, recommendations, approvals, actions };
+  }
+
+  /**
+   * Refuses a draft that cites a span which is not in the document it names.
+   * A system that fabricates a citation has a defect; the case is not stored,
+   * so a fabricated fact never reaches a human as if it were grounded.
+   */
+  private async verifyEvidence(
+    tenantId: OrganizationId,
+    draft: CaseDraft,
+  ): Promise<Result<void, DomainError>> {
+    const verifier = this.deps.evidence;
+    if (verifier === undefined) return ok(undefined);
+    const cited = [
+      ...draft.findings.flatMap((finding) => finding.evidence),
+      ...(draft.nonDeterminato?.evidence ?? []),
+      ...(draft.nonDeterminato?.known ?? []).flatMap((known) => known.evidence),
+      ...(draft.nonDeterminato?.conflicts ?? []).flatMap((conflict) => conflict.evidence),
+    ];
+    if (cited.length === 0) return ok(undefined);
+    const report = await this.deps.transactions.withTenant(tenantId, (scope) =>
+      verifier.verify(scope, cited),
+    );
+    if (report.rejected.length === 0) return ok(undefined);
+    this.logger.warn('case draft cited evidence that does not verify', {
+      checked: report.checked,
+      rejected: report.rejected.length,
+    });
+    return err(
+      new ValidationError(
+        'FABRICATED_EVIDENCE',
+        'The draft cites evidence that is not in the document it names.',
+        {
+          details: {
+            checked: report.checked,
+            rejected: report.rejected.map((item) => ({
+              reason: item.reason,
+              sourceRef: item.evidence.sourceRef,
+              content: item.evidence.content.slice(0, 120),
+            })),
+          },
+        },
+      ),
+    );
   }
 
   private async prepareRecommendations(

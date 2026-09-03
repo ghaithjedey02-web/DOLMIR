@@ -6,6 +6,11 @@ export type {
   SystemContext,
 } from './ai-system.js';
 export { AiSystemRegistry } from './ai-system-registry.js';
+export type {
+  EvidenceVerification,
+  EvidenceVerifier,
+  RejectedEvidence,
+} from './evidence-verifier.js';
 export { CaseProjection } from './case-projection.js';
 export {
   type CaseDetail,
