@@ -17,6 +17,12 @@ import { COMMERCIAL_INBOX_RULES, COMMERCIAL_INBOX_SYSTEM_KEY, readRules } from '
 import type { EvidenceSource } from './domain/verified.js';
 import { buildCaseDraft, type RecommendationDraft } from './analysis/case-draft.js';
 import { assessCompleteness } from './analysis/completeness.js';
+import {
+  type DraftRequest,
+  type DraftedReply,
+  type ReplyDraft,
+  draftReply as defaultDraftReply,
+} from './analysis/draft.js';
 import { resolveAnalysis } from './analysis/resolve.js';
 import { understandMessage } from './analysis/understand.js';
 
@@ -34,40 +40,21 @@ import { understandMessage } from './analysis/understand.js';
  */
 export const COMMERCIAL_INBOX_VERSION = 1;
 
-export interface ReplyDraft {
-  readonly subject: string;
-  readonly body: string;
-  readonly rationale: string;
-}
-
 export interface CommercialInboxOptions {
   /** Which mailbox a reply would go through. `null` means no reply can be proposed. */
   readonly resolveReplyConnection: (
     input: AnalysisInput,
     context: SystemContext,
   ) => Promise<ConnectionId | null>;
-  /**
-   * Writes the reply from verified facts alone. Supplied by the drafting step;
-   * when it is absent the system opens cases without proposing anything.
-   */
+  /** Replaces the built-in drafting step. Tests use it; production does not. */
   readonly draftReply?: (
     request: DraftRequest,
     context: SystemContext,
-  ) => Promise<Result<ReplyDraft | null, DomainError>>;
+  ) => Promise<Result<DraftedReply, DomainError>>;
+  /** When false the system reads and explains but never proposes a reply. */
+  readonly proposeReplies?: boolean;
   readonly understandTier?: LlmTier;
-}
-
-export interface DraftRequest {
-  readonly analysis: Awaited<ReturnType<typeof resolveAnalysis>>;
-  readonly completeness: ReturnType<typeof assessCompleteness>;
-  readonly company: AnalysisInput['company'];
-  readonly rules: ReturnType<typeof readRules>;
-  readonly tenantId: AnalysisInput['tenantId'];
-  /** Message identity, so the reply threads correctly. Never the message content. */
-  readonly inReplyTo: string | null;
-  readonly references: readonly string[];
-  readonly recipients: readonly string[];
-  readonly subject: string | null;
+  readonly draftTier?: LlmTier;
 }
 
 export function createCommercialInboxSystem(options: CommercialInboxOptions): AiSystemDefinition {
@@ -122,14 +109,18 @@ export function createCommercialInboxSystem(options: CommercialInboxOptions): Ai
       const completeness = assessCompleteness(analysis, rules);
 
       let recommendation: RecommendationDraft | null = null;
-      if (completeness.canRecommendReply && options.draftReply !== undefined) {
+      let refusedDraft: DraftedReply['refused'] = null;
+      const drafting =
+        options.draftReply ??
+        ((request, ctx) => defaultDraftReply(ctx.llm, request, ctx, options.draftTier ?? 'fast'));
+      if (completeness.canRecommendReply && options.proposeReplies !== false) {
         const connectionId = await options.resolveReplyConnection(input, context);
         if (connectionId === null) {
           context.logger.info(
             'no mailbox connection to reply through; opening the case without one',
           );
         } else {
-          const drafted = await options.draftReply(
+          const drafted = await drafting(
             {
               analysis,
               completeness,
@@ -144,26 +135,36 @@ export function createCommercialInboxSystem(options: CommercialInboxOptions): Ai
             context,
           );
           if (!drafted.ok) return err(drafted.error);
-          if (drafted.value !== null && sender.address !== null) {
+          refusedDraft = drafted.value.refused;
+          const draft = drafted.value.draft;
+          if (draft !== null && sender.address !== null) {
             recommendation = {
               tool: 'send_mailbox_reply',
               input: {
                 connectionId,
                 to: [sender.address],
-                subject: drafted.value.subject,
-                body: drafted.value.body,
+                subject: draft.subject,
+                body: draft.body,
                 ...(messageIdOf(input.document) === null
                   ? {}
                   : { inReplyTo: messageIdOf(input.document) }),
                 references: referencesOf(input.document),
               },
-              rationale: drafted.value.rationale,
+              rationale: draft.rationale,
             };
           }
         }
       }
 
-      return ok(buildCaseDraft({ analysis, completeness, company: input.company, recommendation }));
+      return ok(
+        buildCaseDraft({
+          analysis,
+          completeness,
+          company: input.company,
+          recommendation,
+          refusedDraft,
+        }),
+      );
     },
   };
 }
@@ -198,3 +199,5 @@ function referencesOf(document: Document): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string').slice(0, 20);
 }
+
+export type { DraftRequest, ReplyDraft };

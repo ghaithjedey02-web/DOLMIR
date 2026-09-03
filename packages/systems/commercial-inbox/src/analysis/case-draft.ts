@@ -30,6 +30,10 @@ export interface CaseDraftInputs {
   readonly completeness: Completeness;
   readonly company: CompanyContext;
   readonly recommendation: RecommendationDraft | null;
+  /** Set when a reply was written and then refused by the guard. */
+  readonly refusedDraft?: {
+    readonly violations: readonly { readonly kind: string; readonly token: string }[];
+  } | null;
 }
 
 export function buildCaseDraft(inputs: CaseDraftInputs): CaseDraftInput {
@@ -71,6 +75,18 @@ export function buildCaseDraft(inputs: CaseDraftInputs): CaseDraftInput {
       status: EpistemicStatus.OBSERVATION,
       evidence: observationEvidence(analysis, 'instructions addressed to an assistant'),
       tags: ['prompt_injection'],
+    });
+  }
+
+  const refused = inputs.refusedDraft ?? null;
+  if (refused !== null && refused.violations.length > 0) {
+    findings.push({
+      statement: `A reply was written and refused before anyone saw it: it contained ${refused.violations
+        .map((item) => `${item.kind} ("${item.token}")`)
+        .join('; ')}, which the verified facts do not support. No reply is proposed.`,
+      status: EpistemicStatus.OBSERVATION,
+      evidence: observationEvidence(analysis, 'a draft that failed the guard'),
+      tags: ['draft_refused'],
     });
   }
 

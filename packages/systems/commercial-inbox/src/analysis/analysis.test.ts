@@ -65,7 +65,7 @@ const seedCatalogue = async (harness: Awaited<ReturnType<typeof createHarness>>)
 describe('Commercial Inbox Intelligence — understanding and resolution', () => {
   it('turns a request for quotation into a reviewable case with verified facts', async () => {
     const llm = new FakeLlmProvider({ replies: [{ output: understanding() }] });
-    const harness = await createHarness({ llm });
+    const harness = await createHarness({ llm, proposeReplies: false });
     await seedCatalogue(harness);
     const delivered = await harness.deliver(rfq());
 
@@ -106,7 +106,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
     ).toBe(true);
     expect(opened.findings.find((f) => f.tags.includes('counterpart'))?.status).toBe('FACT');
     expect(opened.findings.some((f) => f.tags.includes('requested_information'))).toBe(true);
-    // No reply was proposed, because no drafting step is wired in this test.
+    // This test disables drafting; the drafting tests cover the recommendation.
     expect(opened.recommendations).toEqual([]);
   });
 
@@ -131,7 +131,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
         },
       ],
     });
-    const harness = await createHarness({ llm });
+    const harness = await createHarness({ llm, proposeReplies: false });
     await seedCatalogue(harness);
     const delivered = await harness.deliver(rfq());
     const report = await harness.analyze.execute(harness.organizationId, delivered.document.id);
@@ -157,7 +157,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
 
   it('opens a NON_DETERMINATO case naming the missing input when the sender is unknown', async () => {
     const llm = new FakeLlmProvider({ replies: [{ output: understanding() }] });
-    const harness = await createHarness({ llm });
+    const harness = await createHarness({ llm, proposeReplies: false });
     // Only the product is known; the sender is not in the records.
     await harness.seedEntities([
       { kind: 'product', name: 'Flangia tornita S355 DN250', code: 'FL-250' },
@@ -182,7 +182,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
     const llm = new FakeLlmProvider({
       replies: [{ output: understanding({ senderOrganisationQuote: null }) }],
     });
-    const harness = await createHarness({ llm });
+    const harness = await createHarness({ llm, proposeReplies: false });
     await harness.seedEntities([
       { kind: 'customer', name: 'Rossi Impianti S.p.A.', code: 'C1' },
       { kind: 'customer', name: 'Rossi Meccanica S.r.l.', code: 'C2' },
@@ -211,7 +211,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
     const llm = new FakeLlmProvider({
       replies: [{ output: understanding({ containsInstructionsToAssistant: true }) }],
     });
-    const harness = await createHarness({ llm });
+    const harness = await createHarness({ llm, proposeReplies: false });
     await seedCatalogue(harness);
     const delivered = await harness.deliver(rfq({ body: hostile }));
     const report = await harness.analyze.execute(harness.organizationId, delivered.document.id);
@@ -238,7 +238,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
     const notCommercial = new FakeLlmProvider({
       replies: [{ output: understanding({ intent: 'not_commercial', lines: [] }) }],
     });
-    const first = await createHarness({ llm: notCommercial });
+    const first = await createHarness({ llm: notCommercial, proposeReplies: false });
     const newsletter = await first.deliver(rfq({ from: 'news@marketing.test' }));
     const report = await first.analyze.execute(first.organizationId, newsletter.document.id);
     expect(report.ok && report.value).toMatchObject({
@@ -249,6 +249,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
     const excluded = new FakeLlmProvider({ replies: [{ output: understanding() }] });
     const second = await createHarness({
       llm: excluded,
+      proposeReplies: false,
       rules: { [RULE_KEYS.IGNORED_SENDER_DOMAINS]: ['marketing.test'] },
     });
     const delivered = await second.deliver(rfq({ from: 'news@marketing.test' }));
@@ -276,7 +277,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
         { output: { ...understanding(), lines: [{ descriptionQuote: 'x', quantityQuote: 500 }] } },
       ],
     });
-    const second = await createHarness({ llm: offSchema });
+    const second = await createHarness({ llm: offSchema, proposeReplies: false });
     const message = await second.deliver(rfq());
     const bad = await second.analyze.execute(second.organizationId, message.document.id);
     expect(bad.ok && bad.value.failed).toEqual([
@@ -288,7 +289,7 @@ describe('Commercial Inbox Intelligence — understanding and resolution', () =>
     const llm = new FakeLlmProvider({
       replies: [{ output: understanding() }, { output: understanding() }],
     });
-    const harness = await createHarness({ llm });
+    const harness = await createHarness({ llm, proposeReplies: false });
     await seedCatalogue(harness);
     const delivered = await harness.deliver(rfq());
     const first = await harness.analyze.execute(harness.organizationId, delivered.document.id);

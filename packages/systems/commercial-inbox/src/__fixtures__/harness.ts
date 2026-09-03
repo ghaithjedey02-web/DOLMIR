@@ -77,6 +77,8 @@ export const FIXED_NOW = new Date('2026-09-03T10:00:00.000Z');
 export interface HarnessOptions {
   readonly llm: FakeLlmProvider;
   readonly draftReply?: CommercialInboxOptions['draftReply'];
+  /** Defaults to the product behaviour: the system drafts a reply. */
+  readonly proposeReplies?: boolean;
   readonly rules?: Readonly<Record<string, unknown>>;
 }
 
@@ -159,6 +161,7 @@ async function buildHarness(options: HarnessOptions) {
   const system = createCommercialInboxSystem({
     resolveReplyConnection: async () => connectionId,
     ...(options.draftReply === undefined ? {} : { draftReply: options.draftReply }),
+    ...(options.proposeReplies === undefined ? {} : { proposeReplies: options.proposeReplies }),
   });
   for (const rule of system.rules) ruleRegistry.register(rule);
   const policyOverrides = new InMemoryPolicyOverrideRepository(workspaceStore);

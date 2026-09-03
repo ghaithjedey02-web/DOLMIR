@@ -79,10 +79,16 @@ export function assessCompleteness(
   const identified = analysis.customer.kind === 'RESOLVED';
   const describable = !carriesLines || analysis.lines.length > 0;
   const determination = identified && describable ? 'READY_FOR_REVIEW' : 'NON_DETERMINATO';
+  // A company that does not want DOLMIR to acknowledge quotations still gets the
+  // case, the findings and the evidence; it simply gets no proposed reply.
+  const acknowledgementsAllowed =
+    rules.acknowledgeQuoteRequests || !LINE_BEARING_INTENTS.has(intent);
   return {
     missing,
     determination,
     canRecommendReply:
-      determination === 'READY_FOR_REVIEW' && (identified || !rules.requireKnownCustomer),
+      determination === 'READY_FOR_REVIEW' &&
+      acknowledgementsAllowed &&
+      (identified || !rules.requireKnownCustomer),
   };
 }

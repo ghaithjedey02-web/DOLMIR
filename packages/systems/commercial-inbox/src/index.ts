@@ -5,8 +5,6 @@
 export {
   COMMERCIAL_INBOX_VERSION,
   type CommercialInboxOptions,
-  type DraftRequest,
-  type ReplyDraft,
   createCommercialInboxSystem,
 } from './system.js';
 export {
@@ -45,6 +43,18 @@ export {
   resolveAnalysis,
 } from './analysis/resolve.js';
 export { UNDERSTAND_OPERATION, understandMessage } from './analysis/understand.js';
+export {
+  DRAFT_OPERATION,
+  type DraftGuardViolation,
+  type DraftRequest,
+  type DraftedReply,
+  type ReplyDraft,
+  ReplyDraftSchema,
+  allowedTokens,
+  buildBrief,
+  draftReply,
+  guardDraft,
+} from './analysis/draft.js';
 export {
   type CaseDraftInputs,
   type RecommendationDraft,
