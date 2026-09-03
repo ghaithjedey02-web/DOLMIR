@@ -87,13 +87,12 @@ export function organizationRoutes(container: Container): (app: FastifyInstance)
       requirePermission(container, request, Permission.AI_USAGE_READ);
       const query = parseQuery(UsageQuerySchema, request.query);
       const since = query.since === undefined ? undefined : new Date(query.since);
-      const [summary, recent] = await container.transactions.withTenant(
+      const { summary, recent } = await container.transactions.withTenant(
         tenant.organizationId,
-        async (scope) =>
-          Promise.all([
-            container.ai.usage.summarize(scope, since === undefined ? {} : { since }),
-            container.ai.usage.list(scope, { limit: query.limit }),
-          ]),
+        async (scope) => ({
+          summary: await container.ai.usage.summarize(scope, since === undefined ? {} : { since }),
+          recent: await container.ai.usage.list(scope, { limit: query.limit }),
+        }),
       );
       return { since: since ?? null, summary, recent };
     });

@@ -14,6 +14,12 @@ const NOT_TENANT_SCOPED = new Set(['schema_migrations', 'projection_checkpoints'
 /** Tables whose rows are immutable by design (ADR-0004). Extended as modules arrive. */
 const APPEND_ONLY = ['audit_log', 'ledger_events', 'ai_usage', 'company_rules'];
 
+/**
+ * Read-model tables derived from immutable ledger events (ADR-0012 §3): the
+ * runtime role may only insert into them; the owner clears them on a rebuild.
+ */
+const RUNTIME_INSERT_ONLY = ['case_findings', 'approvals', 'actions'];
+
 describe('SQL invariants', () => {
   let db: TestDatabase;
 
@@ -63,6 +69,10 @@ describe('SQL invariants', () => {
       .filter((g) => g.privilege_type === 'UPDATE' && APPEND_ONLY.includes(g.table_name))
       .map((g) => g.table_name);
     expect(appendOnlyUpdates).toEqual([]);
+    const insertOnlyUpdates = grants.rows
+      .filter((g) => g.privilege_type === 'UPDATE' && RUNTIME_INSERT_ONLY.includes(g.table_name))
+      .map((g) => g.table_name);
+    expect(insertOnlyUpdates).toEqual([]);
   });
 
   it('append-only tables that exist carry the forbid_mutation trigger', async () => {

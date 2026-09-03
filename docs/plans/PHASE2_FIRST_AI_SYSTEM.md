@@ -46,7 +46,7 @@ Systems are workspace packages `packages/systems/<key>` (`@dolmir/system-<key>`)
 
 ## 3. Case engine (Core, `cases` module)
 
-State is derived from ledger events (ADR-0004) with a **synchronous projection**: each use case appends the event and applies the projection in the same transaction, and `ProjectionRunner.rebuild` can recreate the tables from the ledger. Events (stream `case/<id>`): `CaseOpened`, `FindingRecorded`, `RecommendationProposed`, `RecommendationApproved`, `RecommendationRejected`, `ActionExecuted`, `ActionFailed`, `CaseResolved`, `OutcomeRecorded`. Tables: `cases`, `case_findings`, `recommendations`, `approvals` (append-only), `actions` (append-only).
+State is derived from ledger events (ADR-0004) with a **synchronous projection**: each use case appends the event and applies the projection in the same transaction, and `ProjectionRunner.rebuild` can recreate the tables from the ledger. Events (stream `case/<id>`): `CaseOpened`, `FindingRecorded`, `RecommendationProposed`, `RecommendationApproved`, `RecommendationRejected`, `ActionExecuted`, `ActionFailed`, `CaseResolved`, `OutcomeRecorded`. Tables: `cases`, `case_findings`, `recommendations`, `approvals`, `actions` — the last three insert-only for the runtime role; the immutable record is the ledger, and the owner role clears the tables when rebuilding them.
 
 Lifecycle: `open` → (`awaiting_approval` when a recommendation needs one) → `resolved` | `dismissed`. A recommendation's policy level is resolved when it is proposed (tenant override → default) and recorded; `AUTO_EXECUTE` recommendations run immediately, `REQUIRE_APPROVAL` wait, `SUGGEST`/`DRAFT` are shown but never executed by the platform.
 

@@ -76,11 +76,10 @@ export class WorkspaceConfiguration {
 
   /** The context for a tenant. A tenant without a saved profile gets defaults derived from its name. */
   async context(scope: TenantScope, fallbackLegalName: string): Promise<CompanyContext> {
-    const [profile, rules, terminology] = await Promise.all([
-      this.deps.profiles.get(scope),
-      this.deps.rules.current(scope),
-      this.deps.terminology.list(scope),
-    ]);
+    // Sequential on purpose: the scope owns one connection, and pg forbids overlapping queries on it.
+    const profile = await this.deps.profiles.get(scope);
+    const rules = await this.deps.rules.current(scope);
+    const terminology = await this.deps.terminology.list(scope);
     const values: Record<string, unknown> = {};
     for (const rule of rules)
       if (rule.value !== null && rule.value !== undefined) values[rule.key] = rule.value;
