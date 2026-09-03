@@ -6,5 +6,6 @@
 export * from './llm/index.js';
 export * from './usage/index.js';
 export * from './tools/index.js';
+export * from './prompting/index.js';
 export * from './adapters/index.js';
 export { canonicalJson, digestOf, sha256Hex } from './shared/canonical-json.js';

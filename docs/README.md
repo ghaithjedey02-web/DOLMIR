@@ -15,6 +15,7 @@ Nothing here is code. Everything here is knowledge — kept current with the imp
 | [`development.md`](development.md)                                                     | Prerequisites, first run, everyday commands, conventions CI enforces, adding a tool                                                    |
 | [`deployment.md`](deployment.md)                                                       | Runtime requirements, configuration, release steps, Supabase compatibility, observability                                              |
 | [`security.md`](security.md)                                                           | Requirement → implementation → evidence table; what is scheduled                                                                       |
+| [`privacy.md`](privacy.md)                                                             | What the platform processes, the controls that exist, and the legal decisions still open                                               |
 | [`testing.md`](testing.md)                                                             | Test projects, running them, recorded exchanges, what a change must come with                                                          |
 
 Evidence labels used across documents: **[CONFIRMED]** · **[HYPOTHESIS]** · **[UNKNOWN]**. A number, date or business fact without a source is not written down.

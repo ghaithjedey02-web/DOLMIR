@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type Container, buildApp, createContainer } from '@dolmir/api';
 import {
+  ROLE_MATRIX_VERSION,
   type OrganizationId,
   type UserId,
   loadConfig,
@@ -155,7 +156,7 @@ describe('HTTP API (e2e)', () => {
     expect(own.json()).toMatchObject({
       organization: { id: orgA, slug: 'officina-a', status: 'active' },
       membership: { roleKey: 'owner' },
-      roleMatrixVersion: 2,
+      roleMatrixVersion: ROLE_MATRIX_VERSION,
     });
     expect(own.json<{ permissions: string[] }>().permissions).toContain('audit:read');
 

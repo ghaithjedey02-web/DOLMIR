@@ -28,6 +28,8 @@ describe('role matrix', () => {
         'ai:invoke',
         'ai_usage:read',
         'audit:read',
+        'connections:manage',
+        'connections:read',
         'decisions:approve',
         'ledger:append',
         'ledger:read',
@@ -37,6 +39,7 @@ describe('role matrix', () => {
       ],
       operator: [
         'ai:invoke',
+        'connections:read',
         'decisions:approve',
         'ledger:append',
         'ledger:read',

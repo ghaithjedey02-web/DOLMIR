@@ -4,3 +4,5 @@
  * and the signing scheme of the raw-MIME ingestion endpoint (ADR-0013).
  */
 export * from './domain/index.js';
+export * from './application/index.js';
+export * from './adapters/index.js';

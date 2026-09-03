@@ -49,11 +49,16 @@ describe('ingestion request signing', () => {
   const timestamp = Math.floor(now.getTime() / 1000);
   const keyId = 'ik_0123456789abcdef';
   const nonce = 'n0nce-n0nce-n0nce-01';
-  const headers = () => ({
-    keyId,
-    timestamp: String(timestamp),
-    nonce,
-    signature: signIngestionRequest(secret, { keyId, timestamp, nonce, body }),
+  const headers = (): Record<string, string> => ({
+    [INGESTION_HEADER_NAMES.keyId]: keyId,
+    [INGESTION_HEADER_NAMES.timestamp]: String(timestamp),
+    [INGESTION_HEADER_NAMES.nonce]: nonce,
+    [INGESTION_HEADER_NAMES.signature]: signIngestionRequest(secret, {
+      keyId,
+      timestamp,
+      nonce,
+      body,
+    }),
   });
 
   it('accepts a fresh, correctly signed request and names the headers it expects', () => {
@@ -86,7 +91,7 @@ describe('ingestion request signing', () => {
     expect(!wrongSecret.ok && wrongSecret.error.code).toBe('INVALID_SIGNATURE');
     const malformed = verifyIngestionSignature(
       secret,
-      { ...headers(), signature: 'zz' },
+      { ...headers(), [INGESTION_HEADER_NAMES.signature]: 'zz' },
       body,
       now,
     );

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { BytesSchema } from '../../../kernel/bytes.js';
 import type { Clock } from '../../../kernel/clock.js';
 import { ActorSchema } from '../../../kernel/context.js';
 import {
@@ -37,7 +38,7 @@ export const IngestDocumentInputSchema = z
     sourceKind: SourceKindSchema,
     sourceRef: z.string().trim().min(1).max(500),
     externalId: z.string().trim().min(1).max(500).optional(),
-    body: z.instanceof(Uint8Array),
+    body: BytesSchema,
     contentType: z.string().trim().min(1).max(255),
     filename: z.string().trim().min(1).max(255).optional(),
     receivedAt: z.date(),

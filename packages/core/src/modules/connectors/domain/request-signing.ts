@@ -22,16 +22,19 @@ export const INGESTION_HEADER_NAMES = {
 
 export const IngestionKeyIdSchema = z.string().regex(/^ik_[a-f0-9]{16}$/);
 
-export const IngestionSignatureHeadersSchema = z
-  .object({
-    keyId: IngestionKeyIdSchema,
-    /** Unix seconds. */
-    timestamp: z.string().regex(/^\d{1,12}$/),
-    nonce: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/),
-    /** Lowercase hex HMAC-SHA256. */
-    signature: z.string().regex(/^[a-f0-9]{64}$/),
-  })
-  .strict();
+/**
+ * The four headers under the names the transport actually carries, so
+ * verification takes a request as received and no caller has to translate
+ * between HTTP names and internal ones and get it subtly wrong.
+ */
+export const IngestionSignatureHeadersSchema = z.object({
+  [INGESTION_HEADER_NAMES.keyId]: IngestionKeyIdSchema,
+  /** Unix seconds. */
+  [INGESTION_HEADER_NAMES.timestamp]: z.string().regex(/^\d{1,12}$/),
+  [INGESTION_HEADER_NAMES.nonce]: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/),
+  /** Lowercase hex HMAC-SHA256. */
+  [INGESTION_HEADER_NAMES.signature]: z.string().regex(/^[a-f0-9]{64}$/),
+});
 export type IngestionSignatureHeaders = z.infer<typeof IngestionSignatureHeadersSchema>;
 
 export interface IngestionSignatureInput {
@@ -75,8 +78,8 @@ export function verifyIngestionSignature(
   now: Date,
   toleranceSeconds = 300,
 ): Result<VerifiedIngestionSignature, UnauthenticatedError> {
-  const headers = IngestionSignatureHeadersSchema.safeParse(rawHeaders);
-  if (!headers.success) {
+  const parsed = IngestionSignatureHeadersSchema.safeParse(rawHeaders);
+  if (!parsed.success) {
     return err(
       new UnauthenticatedError(
         'INVALID_SIGNATURE_HEADERS',
@@ -84,7 +87,13 @@ export function verifyIngestionSignature(
       ),
     );
   }
-  const timestamp = Number(headers.data.timestamp);
+  const headers = {
+    keyId: parsed.data[INGESTION_HEADER_NAMES.keyId],
+    timestamp: parsed.data[INGESTION_HEADER_NAMES.timestamp],
+    nonce: parsed.data[INGESTION_HEADER_NAMES.nonce],
+    signature: parsed.data[INGESTION_HEADER_NAMES.signature],
+  };
+  const timestamp = Number(headers.timestamp);
   const skew = Math.abs(now.getTime() / 1000 - timestamp);
   if (skew > toleranceSeconds) {
     return err(
@@ -98,12 +107,12 @@ export function verifyIngestionSignature(
     );
   }
   const expected = signIngestionRequest(secret, {
-    keyId: headers.data.keyId,
+    keyId: headers.keyId,
     timestamp,
-    nonce: headers.data.nonce,
+    nonce: headers.nonce,
     body,
   });
-  const given = Buffer.from(headers.data.signature, 'hex');
+  const given = Buffer.from(headers.signature, 'hex');
   const wanted = Buffer.from(expected, 'hex');
   if (given.length !== wanted.length || !timingSafeEqual(given, wanted)) {
     return err(
@@ -111,8 +120,8 @@ export function verifyIngestionSignature(
     );
   }
   return ok({
-    keyId: headers.data.keyId,
-    nonce: headers.data.nonce,
+    keyId: headers.keyId,
+    nonce: headers.nonce,
     timestamp: new Date(timestamp * 1000),
   });
 }
