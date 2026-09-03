@@ -4,13 +4,9 @@ export {
   DEFAULT_EFFECT_LEVELS,
   DefaultActionPolicy,
   InMemoryActionPolicy,
-  PolicyLevel,
-  PolicyLevelSchema,
   type PolicyResolution,
   type PolicySubject,
   type TenantPolicyOverrides,
-  ToolEffect,
-  ToolEffectSchema,
   levelPermitsExecution,
 } from './policy.js';
 export {

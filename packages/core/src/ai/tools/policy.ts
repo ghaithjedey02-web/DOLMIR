@@ -1,50 +1,32 @@
-import { z } from 'zod';
-
+import {
+  type PolicyLevel,
+  PolicyLevel as PolicyLevelConst,
+  type ToolEffect,
+} from '../../kernel/action-policy.js';
 import type { OrganizationId } from '../../kernel/ids.js';
 
 /**
  * Action policy (ADR-0011, Direction §13). Every tool declares what kind of
  * effect it has; company policy decides how autonomously the AI may cause it.
- *
- *   read     returns data
- *   analyze  computes or classifies over data it was given
- *   draft    produces content a human may later send or apply; nothing outside DOLMIR changes
- *   act      changes the world or an approved record
+ * The vocabulary (`ToolEffect`, `PolicyLevel`) lives in the kernel so the
+ * workspace module can store overrides without depending on this layer.
  */
-export const ToolEffect = {
-  READ: 'read',
-  ANALYZE: 'analyze',
-  DRAFT: 'draft',
-  ACT: 'act',
-} as const;
-export const ToolEffectSchema = z.enum(['read', 'analyze', 'draft', 'act']);
-export type ToolEffect = z.infer<typeof ToolEffectSchema>;
-
-export const PolicyLevel = {
-  READ_ONLY: 'READ_ONLY',
-  SUGGEST: 'SUGGEST',
-  DRAFT: 'DRAFT',
-  REQUIRE_APPROVAL: 'REQUIRE_APPROVAL',
-  AUTO_EXECUTE: 'AUTO_EXECUTE',
-} as const;
-export const PolicyLevelSchema = z.enum([
-  'READ_ONLY',
-  'SUGGEST',
-  'DRAFT',
-  'REQUIRE_APPROVAL',
-  'AUTO_EXECUTE',
-]);
-export type PolicyLevel = z.infer<typeof PolicyLevelSchema>;
+export {
+  PolicyLevel,
+  PolicyLevelSchema,
+  ToolEffect,
+  ToolEffectSchema,
+} from '../../kernel/action-policy.js';
 
 /** Bumped whenever a default below changes; recorded in every audit entry. */
 export const ACTION_POLICY_VERSION = 1;
 
 /** The code-defined defaults. `act` requires a human approval; nothing auto-executes by default. */
 export const DEFAULT_EFFECT_LEVELS: Readonly<Record<ToolEffect, PolicyLevel>> = {
-  read: PolicyLevel.READ_ONLY,
-  analyze: PolicyLevel.SUGGEST,
-  draft: PolicyLevel.DRAFT,
-  act: PolicyLevel.REQUIRE_APPROVAL,
+  read: PolicyLevelConst.READ_ONLY,
+  analyze: PolicyLevelConst.SUGGEST,
+  draft: PolicyLevelConst.DRAFT,
+  act: PolicyLevelConst.REQUIRE_APPROVAL,
 };
 
 export interface PolicySubject {
@@ -73,9 +55,9 @@ export function levelPermitsExecution(effect: ToolEffect, level: PolicyLevel): b
     case 'analyze':
       return true;
     case 'draft':
-      return level !== PolicyLevel.READ_ONLY && level !== PolicyLevel.SUGGEST;
+      return level !== PolicyLevelConst.READ_ONLY && level !== PolicyLevelConst.SUGGEST;
     case 'act':
-      return level === PolicyLevel.REQUIRE_APPROVAL || level === PolicyLevel.AUTO_EXECUTE;
+      return level === PolicyLevelConst.REQUIRE_APPROVAL || level === PolicyLevelConst.AUTO_EXECUTE;
   }
 }
 

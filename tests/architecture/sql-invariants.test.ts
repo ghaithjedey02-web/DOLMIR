@@ -12,7 +12,7 @@ import { createTestDatabase, type TestDatabase } from '../support/postgres-harne
 const NOT_TENANT_SCOPED = new Set(['schema_migrations', 'projection_checkpoints']);
 
 /** Tables whose rows are immutable by design (ADR-0004). Extended as modules arrive. */
-const APPEND_ONLY = ['audit_log', 'ledger_events', 'ai_usage'];
+const APPEND_ONLY = ['audit_log', 'ledger_events', 'ai_usage', 'company_rules'];
 
 describe('SQL invariants', () => {
   let db: TestDatabase;
