@@ -80,6 +80,8 @@ export interface HarnessOptions {
   /** Defaults to the product behaviour: the system drafts a reply. */
   readonly proposeReplies?: boolean;
   readonly rules?: Readonly<Record<string, unknown>>;
+  /** The company profile a real tenant configures; absent means the bare default. */
+  readonly profile?: Parameters<WorkspaceConfiguration['updateProfile']>[2];
 }
 
 export async function createHarness(options: HarnessOptions): Promise<Harness> {
@@ -174,6 +176,12 @@ async function buildHarness(options: HarnessOptions) {
     audit,
     clock,
   });
+  if (options.profile !== undefined) {
+    const saved = await transactions.withTenant(organizationId, (scope) =>
+      workspace.updateProfile(scope, owner, options.profile as never, 'alfa'),
+    );
+    if (!saved.ok) throw saved.error;
+  }
   for (const [key, value] of Object.entries(options.rules ?? {})) {
     const set = await transactions.withTenant(organizationId, (scope) =>
       workspace.setRule(scope, owner, key, value, 'test'),

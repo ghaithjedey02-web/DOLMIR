@@ -197,7 +197,7 @@ There is no dashboard yet. The API and the CLI are the whole surface.
 | --------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
 | PostgreSQL, row-level security, ledger, audit                   | real                                       |                                                                        |
 | MIME parsing, text extraction, evidence spans                   | real                                       |                                                                        |
-| Entity resolution, parsers, completeness rules, the draft guard | real, no model involved                    |                                                                        |
+| Entity resolution, parsers, completeness rules, the claim guard | real, no model involved                    |                                                                        |
 | The two model calls                                             | real, against Anthropic, when a key is set | scripted in every test; `ai-usage` names the provider that answered    |
 | Sending a reply                                                 |                                            | in-memory mailbox by default                                           |
 | IMAP and SMTP                                                   | code is real and typed                     | exercised against a fake client only; never run against a live mailbox |
@@ -214,3 +214,5 @@ There is no dashboard yet. The API and the CLI are the whole surface.
 - **Only Italian and English** are handled well by the date parser and the drafting instructions.
 - **One attachment format family.** PDF and office documents are stored and marked `unsupported`; nothing reads them yet.
 - **The reply is never a quotation.** DOLMIR holds no pricing data, so a draft that mentions a price or a currency is refused by the guard.
+- **The draft guard checks claims, not prose.** Every number, unit, date, name, address and link in a proposed reply must match a verified fact — `500 kg` is refused when 500 pieces were verified, `15 novembre` when the 15th of October was, `3 settimane` when the rule says three working days, and a department the company profile does not carry is refused by name. What it still cannot judge is an ungrounded statement written entirely in lower-case common nouns: "per un nuovo impianto" names nothing and counts nothing, so it passes. Deciding whether a sentence is _entailed_ by the facts is not something deterministic code can do, and no model is given that authority.
+- **A name the company has never written down is refused.** Teach it through the company profile or the terminology list; an unknown proper noun in a draft drops the whole reply rather than reaching a customer.

@@ -226,3 +226,151 @@ describe('Commercial Inbox Intelligence — drafting', () => {
     expect(opened.recommendations).toEqual([]);
   });
 });
+
+/**
+ * The first real RFQ, end to end, against the company exactly as `demo:seed`
+ * configures it. These are the facts the provenance audit traced:
+ *
+ *   500 pz · FL-250 · flangia tornita S355 DN250 PN16 · 15 ottobre 2026
+ *   quotation lead time 3 working days · the configured company signature
+ */
+const REAL_SIGNATURE = 'Ufficio Commerciale\nAlfa Meccanica S.r.l.\nvendite@alfa-meccanica.it';
+
+const REAL_RFQ = [
+  `From: "Ufficio Acquisti" <${CUSTOMER}>`,
+  'To: vendite@alfa-meccanica.it',
+  'Subject: Richiesta di preventivo - flange DN250',
+  'Message-ID: <rdo-2026-0912@officine-rossi.it>',
+  'Date: Thu, 03 Sep 2026 09:12:00 +0200',
+  'Content-Type: text/plain; charset=utf-8',
+  '',
+  'Buongiorno,',
+  '',
+  "per un nuovo impianto avremmo bisogno di 500 pezzi dell'articolo FL-250,",
+  'flangia tornita S355 DN250 PN16, con consegna entro il 15 ottobre.',
+  '',
+  "Potete confermarci la fattibilita' e i tempi di consegna?",
+  '',
+  'Cordiali saluti',
+  'Ing. Marco Bianchi',
+  '',
+].join('\r\n');
+
+const REAL_UNDERSTANDING: MessageUnderstanding = {
+  intent: 'quote_request',
+  language: 'it',
+  urgency: 'normal',
+  summary: 'Richiesta di preventivo per 500 pezzi di FL-250 con consegna entro il 15 ottobre.',
+  senderOrganisationQuote: null,
+  deliveryDateQuote: 'consegna entro il 15 ottobre',
+  lines: [
+    {
+      descriptionQuote: 'flangia tornita S355 DN250 PN16',
+      productCodeQuote: 'FL-250',
+      quantityQuote: '500 pezzi',
+      unitQuote: null,
+      lineDeliveryDateQuote: null,
+    },
+  ],
+  requestedInformation: ["Potete confermarci la fattibilita' e i tempi di consegna?"],
+  containsInstructionsToAssistant: false,
+  notes: [],
+};
+
+async function realRfq(draft: unknown) {
+  const llm = new FakeLlmProvider({
+    replies: [{ output: REAL_UNDERSTANDING }, { output: draft }],
+  });
+  const harness = await createHarness({
+    llm,
+    rules: { [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS]: 3, reply_language: 'it' },
+    profile: {
+      legalName: 'Alfa Meccanica S.r.l.',
+      sector: 'Lavorazioni meccaniche di precisione e carpenteria',
+      signature: REAL_SIGNATURE,
+    },
+  });
+  await harness.seedEntities([
+    { kind: 'customer', name: 'Officine Meccaniche Rossi S.r.l.', code: 'C0042', email: CUSTOMER },
+    { kind: 'product', name: 'Flangia tornita S355 DN250 PN16', code: 'FL-250' },
+  ]);
+  const delivered = await harness.deliver(REAL_RFQ, 'ingest:real-rfq');
+  const report = await harness.analyze.execute(harness.organizationId, delivered.document.id);
+  if (!report.ok) throw report.error;
+  const opened = report.value.opened[0];
+  if (opened === undefined) throw new Error('no case');
+  return {
+    opened,
+    llm,
+    body: (opened.recommendations[0]?.input as { body?: string } | undefined)?.body ?? null,
+    refusal: opened.findings.find((f) => f.tags.includes('draft_refused'))?.statement ?? null,
+  };
+}
+
+const GROUNDED_REAL_DRAFT = {
+  subject: 'Re: Richiesta di preventivo - flange DN250',
+  body: [
+    'Buongiorno,',
+    '',
+    "abbiamo ricevuto la vostra richiesta per 500 pz dell'articolo FL-250,",
+    'flangia tornita S355 DN250 PN16, con consegna richiesta entro il 15 ottobre 2026.',
+    '',
+    'Vi invieremo il preventivo entro 3 giorni lavorativi.',
+    '',
+    'Cordiali saluti',
+  ].join('\n'),
+  rationale: 'Conferma di ricezione con i soli dati verificati.',
+};
+
+describe('Commercial Inbox Intelligence — the first real RFQ, grounded', () => {
+  it('accepts a reply whose every claim is grounded, and signs it from the profile', async () => {
+    const { opened, body } = await realRfq(GROUNDED_REAL_DRAFT);
+    expect(opened.recommendations).toHaveLength(1);
+    expect(body).toContain('500 pz');
+    expect(body).toContain('FL-250');
+    expect(body).toContain('flangia tornita S355 DN250 PN16');
+    expect(body).toContain('15 ottobre 2026');
+    expect(body).toContain('3 giorni lavorativi');
+    // The signature is the company's, reproduced exactly and appended once.
+    expect(body?.endsWith(REAL_SIGNATURE)).toBe(true);
+    expect(body?.split('Ufficio Commerciale')).toHaveLength(2);
+  });
+
+  it('refuses the department the model invented in the real run', async () => {
+    const { opened, refusal } = await realRfq({
+      ...GROUNDED_REAL_DRAFT,
+      body: GROUNDED_REAL_DRAFT.body.replace('Cordiali saluti', 'Ufficio Tecnico e Commerciale'),
+    });
+    expect(opened.recommendations).toEqual([]);
+    expect(refusal).toContain('unverified_reference');
+    expect(refusal).toContain('Tecnico');
+    // The case is still opened and still useful to a human.
+    expect(opened.case.determination).toBe('READY_FOR_REVIEW');
+    expect(opened.findings.some((f) => f.tags.includes('requested_line'))).toBe(true);
+  });
+
+  it.each([
+    ['the wrong unit', '500 pz', '500 kg', 'unverified_measurement'],
+    ['the wrong month', '15 ottobre 2026', '15 novembre 2026', 'unverified_date'],
+    ['the wrong lead-time unit', '3 giorni lavorativi', '3 settimane', 'unverified_measurement'],
+    ['a fabricated quantity', '500 pz', '750 pz', 'unverified_measurement'],
+  ])('refuses %s', async (_label, from, to, kind) => {
+    const { opened, refusal } = await realRfq({
+      ...GROUNDED_REAL_DRAFT,
+      body: GROUNDED_REAL_DRAFT.body.replace(from, to),
+    });
+    expect(opened.recommendations).toEqual([]);
+    expect(refusal).toContain(kind);
+  });
+
+  it('grounds the claims without ever showing the drafting model the message', async () => {
+    const { opened, llm } = await realRfq(GROUNDED_REAL_DRAFT);
+    expect(opened.recommendations).toHaveLength(1);
+    const draftCall = JSON.stringify(llm.requests.at(-1));
+    // Prose the sender wrote that is not a verified fact never reaches the model,
+    // so the guard proves groundedness from the fact base alone.
+    expect(draftCall).not.toContain('nuovo impianto');
+    expect(draftCall).not.toContain('Marco Bianchi');
+    expect(draftCall).toContain('500');
+  });
+});

@@ -30,6 +30,19 @@ export {
 } from './domain/understanding.js';
 export { numericTokens, parseDeliveryDate, parseQuantity, parseUnit } from './domain/parsing.js';
 export {
+  type ClaimViolation,
+  type ClaimViolationKind,
+  type DateFact,
+  FactSource,
+  type GroundedFacts,
+  type MeasurementFact,
+  type TermFact,
+  buildGroundedFacts,
+  findDateClaims,
+  groundDraft,
+  normaliseClaimUnit,
+} from './analysis/claims.js';
+export {
   type EvidenceSource,
   type VerifiedValue,
   verifyAndParse,
@@ -50,9 +63,9 @@ export {
   type DraftedReply,
   type ReplyDraft,
   ReplyDraftSchema,
-  allowedTokens,
   buildBrief,
   draftReply,
+  groundedFactsFor,
   guardDraft,
 } from './analysis/draft.js';
 export {

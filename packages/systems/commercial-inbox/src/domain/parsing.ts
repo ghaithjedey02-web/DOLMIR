@@ -32,8 +32,8 @@ const EN_MONTHS = [
   'december',
 ];
 
-/** Longest first, so "settembre" is not matched as "set". */
-const MONTH_INDEX: ReadonlyMap<string, number> = new Map(
+/** Longest first, so "settembre" is not matched as "set". Shared with the drafting guard. */
+export const MONTH_INDEX: ReadonlyMap<string, number> = new Map(
   [...IT_MONTHS, ...EN_MONTHS]
     .flatMap((name, index) => {
       const month = (index % 12) + 1;
@@ -42,7 +42,8 @@ const MONTH_INDEX: ReadonlyMap<string, number> = new Map(
     .sort((a, b) => b[0].length - a[0].length),
 );
 
-const UNIT_ALIASES: Readonly<Record<string, string>> = {
+/** Shared with the drafting guard, which must read a unit in a reply the same way. */
+export const UNIT_ALIASES: Readonly<Record<string, string>> = {
   pz: 'pcs',
   pezzi: 'pcs',
   pezzo: 'pcs',
