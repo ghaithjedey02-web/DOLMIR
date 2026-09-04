@@ -1,8 +1,14 @@
 import type { CompanyContext } from '@dolmir/core';
 
+import {
+  SYSTEM_LEXICON,
+  SYSTEM_LEXICON_STEMS,
+  normaliseWord,
+  stemWord,
+  wordParts,
+  wordSegments,
+} from '../domain/lexicon.js';
 import { MONTH_INDEX, UNIT_ALIASES, parseQuantity } from '../domain/parsing.js';
-import type { CommercialInboxRules } from '../domain/rules.js';
-import type { CommercialAnalysis } from './resolve.js';
 
 /**
  * GROUND — what a written reply is allowed to assert, and the check that every
@@ -38,6 +44,13 @@ export const FactSource = {
 } as const;
 export type FactSource = (typeof FactSource)[keyof typeof FactSource];
 
+/** A value and the source that entitles anyone to state it. */
+export interface Provenanced<T> {
+  readonly value: T;
+  readonly source: FactSource;
+  readonly ref: string;
+}
+
 /** A number that means something: 500 pieces, 3 working days, 24 hours. */
 export interface MeasurementFact {
   readonly value: number;
@@ -70,8 +83,56 @@ export interface GroundedFacts {
   readonly phrases: readonly string[];
   /** Every word of every term, lowercased: the proper nouns a reply may name. */
   readonly words: ReadonlySet<string>;
+  /** Those words without their inflectional endings, so `flange` matches `flangia`. */
+  readonly stems: ReadonlySet<string>;
   readonly emails: ReadonlySet<string>;
 }
+
+/**
+ * What the drafting model is given, and where each fact came from.
+ *
+ * Every business value carries its own provenance, so being inside a
+ * structured object is not what makes a value trustworthy — the `source` is,
+ * and it is one of the five the platform recognises. The guard builds its fact
+ * base from this same brief, so the model and the check see the same facts and
+ * neither needs the original message.
+ *
+ * The internal quotation lead time is deliberately absent: an operational
+ * expectation is not a promise, so it never reaches the writer.
+ */
+export interface DraftBrief {
+  readonly counterpart: Provenanced<string>;
+  /** Not a business fact: which language to write in. */
+  readonly language: string;
+  /** Not a business fact: a value of a closed vocabulary the platform defines. */
+  readonly intent: string;
+  readonly requestedLines: {
+    readonly requestedAs: Provenanced<string>;
+    readonly article: Provenanced<string> | null;
+    readonly code: Provenanced<string> | null;
+    readonly quantity: Provenanced<number> | null;
+    readonly unit: string | null;
+    readonly requestedDeliveryDate: Provenanced<string> | null;
+  }[];
+  readonly requestedInformation: Provenanced<string>[];
+  /** Deterministic system wording, built from rules rather than written by anyone. */
+  readonly missingInformation: { readonly name: string; readonly ask: string }[];
+  readonly company: { readonly legalName: Provenanced<string> };
+  /** What the reply may say happens next, and nothing more. */
+  readonly nextStep: NextStep;
+}
+
+export type NextStep =
+  /** The company has promised this many working days. The reply may state it. */
+  | { readonly kind: 'commitment'; readonly workingDays: Provenanced<number> }
+  /** No promise is authorised: the reply says an answer follows, with no deadline. */
+  | { readonly kind: 'internal_review'; readonly say: string };
+
+/** Said when no customer-facing commitment is configured. Deterministic, class E. */
+export const INTERNAL_REVIEW_WORDING: Readonly<Record<string, string>> = {
+  it: 'Vi daremo riscontro dopo la valutazione interna.',
+  en: 'We will come back to you after our internal review.',
+};
 
 export type ClaimViolationKind =
   /** A number matching no verified value at all. */
@@ -84,6 +145,8 @@ export type ClaimViolationKind =
   | 'unverified_reference'
   /** An address, link or contact the company profile does not carry. */
   | 'unverified_contact'
+  /** A word asserting something about the world that no source supports. */
+  | 'unverified_wording'
   /** A price, a currency or a discount. Refused whatever the facts say. */
   | 'forbidden_commitment';
 
@@ -144,58 +207,72 @@ const PERIOD_UNITS: Readonly<Record<string, string>> = {
  * of class E, and it names no company, product, person or commitment — the
  * things that must be grounded cannot hide in it.
  */
-const SYSTEM_WORDS: ReadonlySet<string> = new Set([
-  ...MONTH_INDEX.keys(),
-  // Italian courtesy forms, which are capitalised mid-sentence by convention.
-  'la',
-  'le',
-  'lei',
-  'loro',
-  'vi',
-  'voi',
-  'ci',
-  've',
-  'si',
-  'ne',
-  'gli',
-  'vostra',
-  'vostro',
-  'vostre',
-  'vostri',
-  'sua',
-  'suo',
-  'sue',
-  'suoi',
-  // Openings and closings.
-  'buongiorno',
-  'buonasera',
-  'gentile',
-  'gentili',
-  'egregio',
-  'egregi',
-  'spettabile',
-  'cordiali',
-  'distinti',
-  'saluti',
-  'grazie',
-  'dear',
-  'hello',
-  'regards',
-  'sincerely',
-  'best',
-  'kind',
-  // English pronouns.
-  'we',
-  'you',
-  'your',
-  'our',
-  'i',
-]);
+const SYSTEM_WORDS: ReadonlySet<string> = new Set(
+  [
+    ...MONTH_INDEX.keys(),
+    // Italian courtesy forms, which are capitalised mid-sentence by convention.
+    'la',
+    'le',
+    'lei',
+    'loro',
+    'vi',
+    'voi',
+    'ci',
+    've',
+    'si',
+    'ne',
+    'gli',
+    'vostra',
+    'vostro',
+    'vostre',
+    'vostri',
+    'sua',
+    'suo',
+    'sue',
+    'suoi',
+    // Openings and closings.
+    'buongiorno',
+    'buonasera',
+    'gentile',
+    'gentili',
+    'egregio',
+    'egregi',
+    'spettabile',
+    'cordiali',
+    'distinti',
+    'saluti',
+    'grazie',
+    'dear',
+    'hello',
+    'regards',
+    'sincerely',
+    'best',
+    'kind',
+    // English pronouns.
+    'we',
+    'you',
+    'your',
+    'our',
+    'i',
+  ].map(normaliseWord),
+);
 
 /** A capital starts a new sentence after these, so it names nothing. */
 const SENTENCE_END = new Set(['.', '!', '?', ':', ';', '\n', '\r', '•', '-', '–', '—']);
 
 const MASK = 'x';
+
+/**
+ * The words that name a unit. They assert nothing by themselves — `pezzi` is a
+ * claim only as part of `500 pezzi`, and that pair is checked as a
+ * measurement — so they are allowed wording rather than facts to ground.
+ */
+const UNIT_WORDS: ReadonlySet<string> = new Set(
+  [...Object.keys(UNIT_ALIASES), ...Object.keys(PERIOD_UNITS)]
+    .flatMap((unit) => unit.split(' '))
+    .map(normaliseWord)
+    .filter((word) => word.length > 0),
+);
 
 export function normaliseClaimUnit(text: string | null): string | null {
   if (text === null) return null;
@@ -218,80 +295,82 @@ export function normaliseClaimUnit(text: string | null): string | null {
 }
 
 /**
- * The facts a reply may rest on, built from the analysis, the company profile
- * and the company's rules — the same three inputs the drafting brief is made
- * of. The original message is not among them, and is not needed.
+ * The facts a reply may rest on: the provenanced brief the drafting model was
+ * given, plus the company profile the platform signs with. Deriving them from
+ * the brief is what makes the guarantee checkable — a value the writer never
+ * saw cannot be grounded, and every value it saw carries its own source. The
+ * original message is not among the inputs, and is not needed.
  */
-export function buildGroundedFacts(
-  analysis: CommercialAnalysis,
-  company: CompanyContext,
-  rules: CommercialInboxRules,
-): GroundedFacts {
+export function buildGroundedFacts(brief: DraftBrief, company: CompanyContext): GroundedFacts {
   const measurements: MeasurementFact[] = [];
   const dates: DateFact[] = [];
   const terms: TermFact[] = [];
 
-  const addDate = (value: Date | null | undefined, source: FactSource, ref: string): void => {
-    if (value === null || value === undefined) return;
-    const iso = value.toISOString().slice(0, 10);
-    if (!dates.some((fact) => fact.iso === iso)) dates.push({ iso, source, ref });
+  const addDate = (fact: Provenanced<string> | null): void => {
+    if (fact === null) return;
+    const parsed = new Date(`${fact.value}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) return;
+    const iso = parsed.toISOString().slice(0, 10);
+    if (!dates.some((known) => known.iso === iso)) {
+      dates.push({ iso, source: fact.source, ref: fact.ref });
+    }
     // A reply may name the year of a date it is allowed to state.
-    measurements.push({ value: value.getUTCFullYear(), unit: 'year', source, ref: `${ref}.year` });
+    measurements.push({
+      value: parsed.getUTCFullYear(),
+      unit: 'year',
+      source: fact.source,
+      ref: `${fact.ref}.year`,
+    });
   };
   const addTerm = (text: string | null | undefined, source: FactSource, ref: string): void => {
     if (text === null || text === undefined) return;
     const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    terms.push({ text: trimmed, source, ref });
+    if (trimmed.length > 0) terms.push({ text: trimmed, source, ref });
   };
 
-  for (const [index, line] of analysis.lines.entries()) {
-    const at = `line:${String(index)}`;
+  for (const line of brief.requestedLines) {
     if (line.quantity !== null) {
       measurements.push({
         value: line.quantity.value,
         unit: line.unit,
-        source: FactSource.DOCUMENT,
-        ref: `${at}.quantity`,
+        source: line.quantity.source,
+        ref: line.quantity.ref,
       });
     }
-    addDate(line.deliveryDate?.value, FactSource.DOCUMENT, `${at}.deliveryDate`);
-    addTerm(line.description.value, FactSource.DOCUMENT, `${at}.description`);
-    addTerm(line.productCode?.quote, FactSource.DOCUMENT, `${at}.productCode`);
-    if (line.product.kind === 'RESOLVED') {
-      addTerm(line.product.match.entity.name, FactSource.RECORD, `${at}.product.name`);
-      addTerm(line.product.match.entity.code, FactSource.RECORD, `${at}.product.code`);
-    }
+    addDate(line.requestedDeliveryDate);
+    addTerm(line.requestedAs.value, line.requestedAs.source, line.requestedAs.ref);
+    if (line.article !== null) addTerm(line.article.value, line.article.source, line.article.ref);
+    if (line.code !== null) addTerm(line.code.value, line.code.source, line.code.ref);
   }
+  for (const asked of brief.requestedInformation) {
+    addTerm(asked.value, asked.source, asked.ref);
+  }
+  addTerm(brief.counterpart.value, brief.counterpart.source, brief.counterpart.ref);
+  addTerm(
+    brief.company.legalName.value,
+    brief.company.legalName.source,
+    brief.company.legalName.ref,
+  );
 
-  addDate(analysis.deliveryDate?.value, FactSource.DOCUMENT, 'analysis.deliveryDate');
-  addTerm(analysis.senderOrganisation?.value, FactSource.DOCUMENT, 'analysis.senderOrganisation');
-  for (const [index, asked] of analysis.requestedInformation.entries()) {
-    addTerm(asked.value, FactSource.DOCUMENT, `requestedInformation:${String(index)}`);
-  }
-  if (analysis.customer.kind === 'RESOLVED') {
-    addTerm(analysis.customer.match.entity.name, FactSource.RECORD, 'customer.name');
-    addTerm(analysis.customer.match.entity.code, FactSource.RECORD, 'customer.code');
-  }
-
-  if (rules.quotationLeadTimeDays !== null) {
+  // The only duration a reply may promise: a commitment the company configured.
+  // The internal expectation is not in the brief and is not grounded here.
+  if (brief.nextStep.kind === 'commitment') {
     measurements.push({
-      value: rules.quotationLeadTimeDays,
+      value: brief.nextStep.workingDays.value,
       unit: 'working_day',
-      source: FactSource.RULE,
-      ref: 'rule:commercial_inbox.quotation_lead_time_days',
+      source: brief.nextStep.workingDays.source,
+      ref: brief.nextStep.workingDays.ref,
     });
+  } else {
+    addTerm(brief.nextStep.say, FactSource.SYSTEM, 'system.nextStep');
   }
-  if (rules.responseSlaHours !== null) {
-    measurements.push({
-      value: rules.responseSlaHours,
-      unit: 'hour',
-      source: FactSource.RULE,
-      ref: 'rule:response_sla_hours',
-    });
+  for (const item of brief.missingInformation) {
+    addTerm(item.name, FactSource.SYSTEM, 'system.missing.name');
+    addTerm(item.ask, FactSource.SYSTEM, 'system.missing.ask');
   }
 
-  addTerm(company.profile.legalName, FactSource.PROFILE, 'profile.legalName');
+  // The profile is not in the brief — the platform signs with it rather than
+  // asking the writer to — but a reply may still name the company it works for.
   addTerm(company.profile.sector, FactSource.PROFILE, 'profile.sector');
   for (const [index, line] of (company.profile.signature ?? '').split('\n').entries()) {
     addTerm(line, FactSource.PROFILE, `profile.signature:${String(index)}`);
@@ -305,10 +384,10 @@ export function buildGroundedFacts(
   for (const term of terms) {
     for (const match of term.text.matchAll(EMAIL)) emails.add(match[0].toLowerCase());
     for (const raw of term.text.split(/\s+/)) {
-      const token = raw.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}.]+$/gu, '');
-      if (token.length > 0) words.add(token);
+      for (const part of wordParts(raw)) words.add(part);
       for (const part of raw.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
-        if (part.length > 0) words.add(part);
+        const normalised = normaliseWord(part);
+        if (normalised.length > 0) words.add(normalised);
       }
     }
   }
@@ -317,7 +396,8 @@ export function buildGroundedFacts(
     (a, b) => b.length - a.length || a.localeCompare(b),
   );
 
-  return { measurements, dates, terms, phrases, words, emails };
+  const stems = new Set([...words].map(stemWord));
+  return { measurements, dates, terms, phrases, words, stems, emails };
 }
 
 interface DateClaim {
@@ -449,8 +529,7 @@ function maskGroundedWords(text: string, words: ReadonlySet<string>): string {
   for (const match of [...text.matchAll(WORD)].reverse()) {
     const token = match[0];
     if (!/\p{L}/u.test(token)) continue;
-    const bare = token.toLowerCase();
-    if (!words.has(bare) && !words.has(bare.replace(/[.'\u2019-]+$/u, ''))) continue;
+    if (!wordParts(token).some((part) => words.has(part))) continue;
     masked = mask(masked, match.index, token.length);
   }
   return masked;
@@ -461,7 +540,6 @@ const NUMBER_WITH_UNIT = new RegExp(
   `(\\d[\\d.,${GROUPERS}]*\\d|\\d)\\s*(%|\\p{L}+(?:\\s+\\p{L}+)?)?`,
   'gu',
 );
-const CAPITALISED = /\p{Lu}[\p{L}\p{N}.'’-]*/gu;
 
 /**
  * Decomposes a written reply into claims and refuses every one the facts do
@@ -506,13 +584,34 @@ export function groundDraft(text: string, facts: GroundedFacts): ClaimViolation[
     });
   }
 
-  for (const match of rest.matchAll(CAPITALISED)) {
+  for (const match of rest.matchAll(WORD)) {
     const word = match[0];
-    const bare = word.toLowerCase().replace(/[^\p{L}\p{N}.]+$/u, '');
-    if (SYSTEM_WORDS.has(bare) || SYSTEM_WORDS.has(bare.replace(/\.$/, ''))) continue;
-    if (facts.words.has(bare) || facts.words.has(bare.replace(/\.$/, ''))) continue;
-    if (startsSentence(rest, match.index)) continue;
-    violations.push({ kind: 'unverified_reference', token: word });
+    if (!/\p{L}/u.test(word)) continue;
+    const parts = wordParts(word);
+    // Filler stands for text already accounted for; it asserts nothing.
+    if (parts.every((part) => /^x+$/.test(part))) continue;
+    const whole = normaliseWord(word);
+    const grounded = (part: string): boolean =>
+      facts.words.has(part) ||
+      SYSTEM_LEXICON.has(part) ||
+      UNIT_WORDS.has(part) ||
+      facts.stems.has(stemWord(part)) ||
+      SYSTEM_LEXICON_STEMS.has(stemWord(part));
+    // A word is accounted for whole, or piece by piece across an elision:
+    // `dell'articolo` is `dell` and `articolo`, both of which must be known.
+    if (grounded(whole) || wordSegments(word).every(grounded)) continue;
+    // A capital that does not begin a sentence names something: a department, a
+    // person, a place, a company. It must be grounded, and the letter-opening
+    // vocabulary is the only exception.
+    if (/\p{Lu}/u.test(word.charAt(0))) {
+      if (parts.some((part) => SYSTEM_WORDS.has(part))) continue;
+      if (startsSentence(rest, match.index)) continue;
+      violations.push({ kind: 'unverified_reference', token: word });
+      continue;
+    }
+    // Lower case: a content word outside the platform's own letter vocabulary
+    // asserts something about the world, and nothing here supports it.
+    violations.push({ kind: 'unverified_wording', token: word });
   }
 
   return violations;

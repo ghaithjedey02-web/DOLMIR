@@ -11,6 +11,7 @@ export const COMMERCIAL_INBOX_SYSTEM_KEY = 'commercial_inbox';
 export const RULE_KEYS = {
   ACKNOWLEDGE_QUOTE_REQUESTS: 'commercial_inbox.acknowledge_quote_requests',
   QUOTATION_LEAD_TIME_DAYS: 'commercial_inbox.quotation_lead_time_days',
+  QUOTATION_CUSTOMER_COMMITMENT_DAYS: 'commercial_inbox.quotation_customer_commitment_days',
   IGNORED_SENDER_DOMAINS: 'commercial_inbox.ignored_sender_domains',
   REQUIRE_KNOWN_CUSTOMER: 'commercial_inbox.require_known_customer',
 } as const;
@@ -26,7 +27,14 @@ export const COMMERCIAL_INBOX_RULES: readonly RuleDefinition[] = [
   {
     key: RULE_KEYS.QUOTATION_LEAD_TIME_DAYS,
     description:
-      'Working days the company usually needs to return a quotation. Stated in an acknowledgement so the customer knows when to expect it.',
+      'INTERNAL. Working days the company usually needs to return a quotation. An operational expectation for planning and for the people reading a case; it is never stated to a counterpart and never reaches the drafting step.',
+    schema: z.number().int().min(1).max(60),
+    owner: COMMERCIAL_INBOX_SYSTEM_KEY,
+  },
+  {
+    key: RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS,
+    description:
+      'CUSTOMER-FACING. Working days the company is willing to promise a counterpart for a quotation. Setting it authorises a reply to state that deadline, and nothing else does — an internal expectation is not a promise. Leave it unset and a reply says an answer will follow after the internal review, without naming a date.',
     schema: z.number().int().min(1).max(60),
     owner: COMMERCIAL_INBOX_SYSTEM_KEY,
   },
@@ -48,7 +56,10 @@ export const COMMERCIAL_INBOX_RULES: readonly RuleDefinition[] = [
 
 export interface CommercialInboxRules {
   readonly acknowledgeQuoteRequests: boolean;
+  /** Internal planning figure. Never stated to a counterpart. */
   readonly quotationLeadTimeDays: number | null;
+  /** The only figure a reply may promise. `null` means the company has promised nothing. */
+  readonly quotationCustomerCommitmentDays: number | null;
   readonly ignoredSenderDomains: readonly string[];
   readonly requireKnownCustomer: boolean;
   readonly replyLanguage: string | null;
@@ -70,6 +81,7 @@ export function readRules(values: Readonly<Record<string, unknown>>): Commercial
   return {
     acknowledgeQuoteRequests: bool(RULE_KEYS.ACKNOWLEDGE_QUOTE_REQUESTS, true),
     quotationLeadTimeDays: int(RULE_KEYS.QUOTATION_LEAD_TIME_DAYS),
+    quotationCustomerCommitmentDays: int(RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS),
     ignoredSenderDomains: list(RULE_KEYS.IGNORED_SENDER_DOMAINS).map((item) =>
       item.trim().toLowerCase(),
     ),

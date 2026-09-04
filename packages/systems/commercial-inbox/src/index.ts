@@ -35,13 +35,18 @@ export {
   type DateFact,
   FactSource,
   type GroundedFacts,
+  INTERNAL_REVIEW_WORDING,
+  type DraftBrief,
   type MeasurementFact,
+  type NextStep,
+  type Provenanced,
   type TermFact,
   buildGroundedFacts,
   findDateClaims,
   groundDraft,
   normaliseClaimUnit,
 } from './analysis/claims.js';
+export { SYSTEM_LEXICON, normaliseWord, wordParts } from './domain/lexicon.js';
 export {
   type EvidenceSource,
   type VerifiedValue,

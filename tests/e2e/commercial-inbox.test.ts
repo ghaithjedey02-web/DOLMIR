@@ -61,8 +61,7 @@ const draft = {
     'confermiamo la ricezione della vostra richiesta per 500 pezzi di Flangia tornita S355 DN250 PN16,',
     'con consegna richiesta per il 15/10/2026.',
     'Vi invieremo il preventivo entro 3 giorni lavorativi.',
-    'Ufficio Commerciale',
-    'Alfa Meccanica S.r.l.',
+    'Cordiali saluti',
   ].join('\n'),
   rationale: 'Acknowledge the request and state when the quotation will follow.',
 };
@@ -174,6 +173,7 @@ describe('Commercial Inbox Intelligence (e2e)', () => {
     for (const [key, value] of [
       ['reply_language', 'it'],
       ['commercial_inbox.quotation_lead_time_days', 3],
+      ['commercial_inbox.quotation_customer_commitment_days', 3],
     ] as const) {
       const saved = await app.inject({
         method: 'PUT',

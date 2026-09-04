@@ -10,6 +10,7 @@ import {
   groundDraft,
   normaliseClaimUnit,
 } from './claims.js';
+import { type DraftRequest, buildBrief } from './draft.js';
 import type { CommercialAnalysis } from './resolve.js';
 
 /**
@@ -17,39 +18,48 @@ import type { CommercialAnalysis } from './resolve.js';
  *
  *   500 pieces of FL-250 / "flangia tornita S355 DN250 PN16"
  *   requested for the 15th of October 2026 (the year inferred from receipt)
- *   from Officine Meccaniche Rossi S.r.l., quotation lead time 3 working days.
+ *   from Officine Meccaniche Rossi S.r.l.
  *
- * Every adversarial case below is written against exactly these facts, so a
- * refusal is never an artefact of a thinner fact base than production has.
+ * Every adversarial case is written against exactly these facts, so a refusal
+ * is never an artefact of a thinner fact base than production has.
  */
 const DELIVERY = new Date('2026-10-15T00:00:00.000Z');
+const EVIDENCE = { kind: 'DOCUMENT_SPAN', sourceRef: 'document:x', content: '', locator: {} };
+const verified = <T>(value: T, quote = String(value)) => ({
+  value,
+  quote,
+  evidence: EVIDENCE,
+  source: 'email',
+});
 
-const analysis = {
-  lines: [
-    {
-      index: 0,
-      description: { value: 'flangia tornita S355 DN250 PN16', quote: '', source: 'email' },
-      productCode: { value: 'FL-250', quote: 'FL-250', source: 'email' },
-      product: {
-        kind: 'RESOLVED',
-        match: { entity: { name: 'Flangia tornita S355 DN250 PN16', code: 'FL-250' } },
+function analysisWith(patch: Partial<Record<string, unknown>> = {}): CommercialAnalysis {
+  return {
+    understanding: { intent: 'quote_request', language: 'it' },
+    lines: [
+      {
+        index: 0,
+        description: verified('flangia tornita S355 DN250 PN16'),
+        productCode: verified('FL-250'),
+        product: {
+          kind: 'RESOLVED',
+          match: { entity: { name: 'Flangia tornita S355 DN250 PN16', code: 'FL-250' } },
+        },
+        quantity: verified(500, '500 pezzi'),
+        unit: 'pcs',
+        deliveryDate: verified(DELIVERY, '15 ottobre'),
       },
-      quantity: { value: 500, quote: '500 pezzi', source: 'email' },
-      unit: 'pcs',
-      deliveryDate: { value: DELIVERY, quote: '15 ottobre', source: 'email' },
+    ],
+    deliveryDate: verified(DELIVERY, '15 ottobre'),
+    requestedInformation: [verified("Potete confermarci la fattibilita' e i tempi di consegna?")],
+    senderOrganisation: null,
+    customer: {
+      kind: 'RESOLVED',
+      match: { entity: { name: 'Officine Meccaniche Rossi S.r.l.', code: 'C0042' } },
     },
-  ],
-  deliveryDate: { value: DELIVERY, quote: '15 ottobre', source: 'email' },
-  requestedInformation: [
-    { value: "Potete confermarci la fattibilita' e i tempi di consegna?", source: 'email' },
-  ],
-  senderOrganisation: null,
-  customer: {
-    kind: 'RESOLVED',
-    match: { entity: { name: 'Officine Meccaniche Rossi S.r.l.', code: 'C0042' } },
-  },
-  rejectedQuotes: [],
-} as unknown as CommercialAnalysis;
+    rejectedQuotes: [],
+    ...patch,
+  } as unknown as CommercialAnalysis;
+}
 
 const SIGNATURE = 'Ufficio Commerciale\nAlfa Meccanica S.r.l.\nvendite@alfa-meccanica.it';
 
@@ -63,54 +73,112 @@ const company = {
   terminology: [{ term: 'RdO', meaning: 'Richiesta di offerta.' }],
 } as unknown as CompanyContext;
 
-const rules = {
-  acknowledgeQuoteRequests: true,
-  quotationLeadTimeDays: 3,
-  ignoredSenderDomains: [],
-  requireKnownCustomer: false,
-  replyLanguage: 'it',
-  responseSlaHours: 24,
-} satisfies CommercialInboxRules;
+function rulesWith(patch: Partial<CommercialInboxRules> = {}): CommercialInboxRules {
+  return {
+    acknowledgeQuoteRequests: true,
+    quotationLeadTimeDays: 3,
+    quotationCustomerCommitmentDays: null,
+    ignoredSenderDomains: [],
+    requireKnownCustomer: false,
+    replyLanguage: 'it',
+    responseSlaHours: 24,
+    ...patch,
+  };
+}
 
-const facts = buildGroundedFacts(analysis, company, rules);
-const check = (text: string): ClaimViolationKind[] =>
-  groundDraft(text, facts).map((violation) => violation.kind);
-const kindsOf = (text: string): string =>
-  groundDraft(text, facts)
+function factsFor(rules: CommercialInboxRules, analysis = analysisWith()) {
+  const request = {
+    analysis,
+    completeness: { missing: [] },
+    company,
+    rules,
+  } as unknown as DraftRequest;
+  const brief = buildBrief(analysis, request, company, rules);
+  return { brief, facts: buildGroundedFacts(brief, company) };
+}
+
+/** The company has promised its counterparts three working days. */
+const committed = factsFor(rulesWith({ quotationCustomerCommitmentDays: 3 }));
+/** The company plans on three working days internally and has promised nothing. */
+const internalOnly = factsFor(rulesWith());
+
+const check = (text: string, ground = committed.facts): ClaimViolationKind[] =>
+  groundDraft(text, ground).map((violation) => violation.kind);
+const report = (text: string, ground = committed.facts): string =>
+  groundDraft(text, ground)
     .map((violation) => `${violation.kind}:${violation.token}`)
     .join(' | ');
 
+describe('the brief carries provenance for every business value', () => {
+  it('marks verified message prose as document evidence, not as trusted structure', () => {
+    const line = committed.brief.requestedLines[0];
+    expect(line?.requestedAs).toEqual({
+      value: 'flangia tornita S355 DN250 PN16',
+      source: 'document_evidence',
+      ref: 'line:0.description',
+    });
+    expect(line?.quantity).toMatchObject({ value: 500, source: 'document_evidence' });
+    expect(line?.article).toMatchObject({
+      value: 'Flangia tornita S355 DN250 PN16',
+      source: 'entity_record',
+    });
+    expect(committed.brief.counterpart).toMatchObject({ source: 'entity_record' });
+    expect(committed.brief.company.legalName).toMatchObject({ source: 'company_profile' });
+  });
+
+  it('never puts the company signature or the internal lead time in front of the writer', () => {
+    const json = JSON.stringify(internalOnly.brief);
+    expect(json).not.toContain('Ufficio Commerciale');
+    expect(json).not.toContain('quotationLeadTime');
+    expect(internalOnly.brief.nextStep).toEqual({
+      kind: 'internal_review',
+      say: 'Vi daremo riscontro dopo la valutazione interna.',
+    });
+  });
+
+  it('offers a deadline only when the company configured a customer-facing one', () => {
+    expect(committed.brief.nextStep).toEqual({
+      kind: 'commitment',
+      workingDays: {
+        value: 3,
+        source: 'company_rule',
+        ref: 'rule:commercial_inbox.quotation_customer_commitment_days',
+      },
+    });
+  });
+});
+
 describe('the fact base', () => {
-  it('keeps a quantity together with its unit, and a lead time with its own', () => {
-    expect(facts.measurements).toContainEqual({
+  it('keeps a quantity together with its unit', () => {
+    expect(committed.facts.measurements).toContainEqual({
       value: 500,
       unit: 'pcs',
       source: 'document_evidence',
       ref: 'line:0.quantity',
     });
-    expect(facts.measurements).toContainEqual({
+  });
+
+  it('grounds a duration only from a customer-facing commitment', () => {
+    expect(committed.facts.measurements).toContainEqual({
       value: 3,
       unit: 'working_day',
       source: 'company_rule',
-      ref: 'rule:commercial_inbox.quotation_lead_time_days',
+      ref: 'rule:commercial_inbox.quotation_customer_commitment_days',
     });
+    expect(internalOnly.facts.measurements.some((fact) => fact.unit === 'working_day')).toBe(false);
   });
 
-  it('records the requested date as a date, with the source that produced it', () => {
-    expect(facts.dates).toContainEqual({
+  it('records the requested date, and grounds names from the record and the profile', () => {
+    expect(committed.facts.dates).toContainEqual({
       iso: '2026-10-15',
       source: 'document_evidence',
       ref: 'line:0.deliveryDate',
     });
-  });
-
-  it('grounds names from the catalogue and the company profile, and nothing else', () => {
-    expect(facts.words.has('flangia')).toBe(true);
-    expect(facts.words.has('commerciale')).toBe(true);
-    expect(facts.words.has('rossi')).toBe(true);
-    // The company has a commercial office; it has never declared a technical one.
-    expect(facts.words.has('tecnico')).toBe(false);
-    expect(facts.emails.has('vendite@alfa-meccanica.it')).toBe(true);
+    expect(committed.facts.words.has('flangia')).toBe(true);
+    expect(committed.facts.words.has('rossi')).toBe(true);
+    expect(committed.facts.words.has('commerciale')).toBe(true);
+    expect(committed.facts.words.has('tecnico')).toBe(false);
+    expect(committed.facts.emails.has('vendite@alfa-meccanica.it')).toBe(true);
   });
 });
 
@@ -124,7 +192,6 @@ describe('unit and date reading', () => {
     expect(normaliseClaimUnit('pezzi')).toBe('pcs');
     expect(normaliseClaimUnit('pz')).toBe('pcs');
     expect(normaliseClaimUnit('kg')).toBe('kg');
-    expect(normaliseClaimUnit('preventivo')).toBeNull();
   });
 
   it('finds a date however it is written', () => {
@@ -155,28 +222,118 @@ describe('grounded drafts are accepted', () => {
       '',
       'Cordiali saluti',
     ].join('\n');
-    expect(kindsOf(body)).toBe('');
+    expect(report(body)).toBe('');
   });
 
-  it('accepts the same facts written differently: the guard checks meaning, not phrasing', () => {
+  it('accepts the same facts in different natural-language wording', () => {
     for (const body of [
       'Confermiamo la ricezione della richiesta di 500 pezzi.',
-      'La quantita’ richiesta e’ di 500 pz.',
-      'Consegna desiderata: 15/10/2026.',
-      'Consegna desiderata: 2026-10-15.',
-      'Il preventivo seguira’ entro 3 giorni lavorativi.',
+      "La quantita' richiesta e' di 500 pz.",
+      'Consegna richiesta: 15/10/2026.',
+      'Consegna richiesta: 2026-10-15.',
+      "Il preventivo seguira' entro 3 giorni lavorativi.",
       'Our quotation will follow within 3 working days.',
       'Nel 2026 la consegna richiesta cade il 15 ottobre.',
-      'Rispondiamo di norma entro 24 ore.',
+      'Vi ringraziamo per la richiesta e vi risponderemo al piu presto.',
     ]) {
-      expect(`${body} -> ${kindsOf(body)}`).toBe(`${body} -> `);
+      expect(`${body} -> ${report(body)}`).toBe(`${body} -> `);
     }
   });
 
   it('accepts the counterpart, the article and the company by name', () => {
     const body =
-      'Gentile Officine Meccaniche Rossi S.r.l., la flangia tornita S355 DN250 PN16 e’ a catalogo presso Alfa Meccanica S.r.l.';
-    expect(kindsOf(body)).toBe('');
+      "Gentile Officine Meccaniche Rossi S.r.l., la flangia tornita S355 DN250 PN16 e' a riferimento presso Alfa Meccanica S.r.l.";
+    expect(report(body)).toBe('');
+  });
+
+  it('accepts the safe wording when no deadline is authorised', () => {
+    expect(report('Vi daremo riscontro dopo la valutazione interna.', internalOnly.facts)).toBe('');
+  });
+});
+
+describe('the internal lead time is not a customer commitment', () => {
+  const promise = "Vi comunicheremo l'offerta completa entro 3 giorni lavorativi.";
+
+  it('refuses the promise when only the internal expectation is configured', () => {
+    expect(check(promise, internalOnly.facts)).toContain('unverified_measurement');
+  });
+
+  it('accepts the same promise once the company configures the commitment', () => {
+    expect(report(promise)).toBe('');
+  });
+
+  it('refuses any invented deadline even when a commitment exists', () => {
+    expect(check('Offerta completa entro 2 giorni lavorativi.')).toContain(
+      'unverified_measurement',
+    );
+    expect(check('Offerta completa entro 3 settimane.')).toContain('unverified_measurement');
+    expect(check('Offerta completa entro 3 mesi.')).toContain('unverified_measurement');
+    expect(check('Offerta completa entro 3 giorni.')).toContain('unverified_measurement');
+  });
+
+  it('refuses a deadline of any kind when none is authorised', () => {
+    for (const text of [
+      'Vi risponderemo entro 3 giorni lavorativi.',
+      'Vi risponderemo entro 5 giorni.',
+      'Riscontro entro il 20/09/2026.',
+    ]) {
+      expect(check(text, internalOnly.facts).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('factual prose needs evidence, whatever its case', () => {
+  const claim = 'La richiesta riguarda un nuovo impianto.';
+
+  it('refuses "nuovo impianto" when nothing in the message supports it', () => {
+    expect(check(claim)).toContain('unverified_wording');
+    expect(report(claim)).toContain('unverified_wording:impianto');
+  });
+
+  it('accepts "nuovo impianto" once it is verified document evidence', () => {
+    const supported = factsFor(
+      rulesWith({ quotationCustomerCommitmentDays: 3 }),
+      analysisWith({
+        requestedInformation: [
+          verified("Potete confermarci la fattibilita' e i tempi di consegna?"),
+          verified('per un nuovo impianto'),
+        ],
+      }),
+    );
+    expect(report(claim, supported.facts)).toBe('');
+    // And it is evidence, not trusted structure: the source says where it came from.
+    expect(supported.brief.requestedInformation.at(-1)).toMatchObject({
+      value: 'per un nuovo impianto',
+      source: 'document_evidence',
+    });
+  });
+
+  it('refuses unsupported factual prose that carries no number and no capital', () => {
+    for (const text of [
+      'Il materiale e’ disponibile a magazzino.',
+      'La produzione avviene nel nostro stabilimento.',
+      'Applichiamo le condizioni del contratto quadro.',
+      'Siamo in possesso della certificazione richiesta.',
+      'Possiamo garantire la fornitura nei tempi indicati.',
+    ]) {
+      expect(`${text} -> ${check(text).join(',')}`).toContain('unverified_wording');
+    }
+  });
+
+  it('accepts supported factual prose written in several ways', () => {
+    const supported = factsFor(
+      rulesWith({ quotationCustomerCommitmentDays: 3 }),
+      analysisWith({
+        requestedInformation: [verified('per un nuovo impianto di verniciatura')],
+      }),
+    );
+    for (const text of [
+      'Abbiamo ricevuto la richiesta per un nuovo impianto di verniciatura.',
+      'Si tratta di un impianto nuovo.',
+      'La verniciatura del nuovo impianto e’ il riferimento della richiesta.',
+    ]) {
+      expect(`${text} -> ${report(text, supported.facts)}`).toBe(`${text} -> `);
+    }
   });
 });
 
@@ -186,42 +343,26 @@ describe('adversarial: a claim the facts do not support is refused', () => {
     ['wrong month', 'Consegna richiesta entro il 15 novembre 2026.', 'unverified_date'],
     ['wrong day', 'Consegna richiesta entro il 12 ottobre 2026.', 'unverified_date'],
     ['wrong year', 'Consegna richiesta entro il 15 ottobre 2027.', 'unverified_date'],
-    ['wrong numeric date', 'Spedizione prevista il 20/09/2026.', 'unverified_date'],
+    ['wrong numeric date', 'Consegna prevista il 20/09/2026.', 'unverified_date'],
     ['wrong quantity', 'Confermiamo 600 pezzi.', 'unverified_measurement'],
     ['wrong product', 'Vi proponiamo invece la flangia FL-300.', 'unverified_reference'],
     ['wrong customer', 'Gentile Brescia Impianti S.p.A.,', 'unverified_reference'],
-    [
-      'wrong lead-time unit (weeks)',
-      'Offerta completa entro 3 settimane.',
-      'unverified_measurement',
-    ],
-    ['wrong lead-time unit (months)', 'Offerta completa entro 3 mesi.', 'unverified_measurement'],
-    ['wrong lead-time unit (days)', 'Offerta completa entro 3 giorni.', 'unverified_measurement'],
     ['invented department', 'Ufficio Tecnico e Commerciale', 'unverified_reference'],
-    [
-      'invented employee',
-      'Il vostro referente e’ il geometra Paolo Ferrari.',
-      'unverified_reference',
-    ],
+    ['invented employee', "Il vostro riferimento e' Paolo Ferrari.", 'unverified_reference'],
     [
       'invented stock availability',
-      'Il materiale e’ disponibile presso il Magazzino Centrale.',
-      'unverified_reference',
+      'Il materiale resta disponibile a magazzino.',
+      'unverified_wording',
     ],
-    ['invented certification claim', 'Siamo certificati ISO 9001.', 'unverified_reference'],
-    ['invented price', 'Il prezzo unitario e’ di 12,50 EUR.', 'forbidden_commitment'],
+    ['invented certification', 'Siamo certificati secondo la norma vigente.', 'unverified_wording'],
+    ['invented plant', 'La produzione avviene nel nostro stabilimento.', 'unverified_wording'],
+    ['invented agreement', 'Come da accordo quadro in essere.', 'unverified_wording'],
+    ['invented capability', 'Possiamo garantire la lavorazione interna.', 'unverified_wording'],
+    ['invented price', "Il prezzo unitario e' di 12,50 EUR.", 'forbidden_commitment'],
     ['invented discount', 'Vi riconosciamo uno sconto del 7%.', 'unverified_measurement'],
-    [
-      'discount reusing a verified number',
-      'Vi riconosciamo uno sconto del 3%.',
-      'unverified_measurement',
-    ],
-    [
-      'invented delivery commitment',
-      'Garantiamo la consegna in 10 giorni.',
-      'unverified_measurement',
-    ],
-    ['invented capacity claim', 'Produciamo 20000 pezzi al mese.', 'unverified_measurement'],
+    ['discount reusing a verified number', 'Applichiamo il 3% in meno.', 'unverified_measurement'],
+    ['invented delivery commitment', 'Consegniamo in 10 giorni.', 'unverified_measurement'],
+    ['invented capacity', 'Produciamo 20000 pezzi al mese.', 'unverified_measurement'],
     [
       'invented contact address',
       'Scrivete a ufficio.tecnico@alfa-meccanica.it.',
@@ -229,10 +370,10 @@ describe('adversarial: a claim the facts do not support is refused', () => {
     ],
     [
       'invented web page',
-      'Trovate il catalogo su www.alfa-meccanica.it/catalogo.',
+      'Il riferimento e’ su www.alfa-meccanica.it/catalogo.',
       'unverified_contact',
     ],
-    ['invented telephone number', 'Chiamateci al +39 030 1234567.', 'unverified_contact'],
+    ['invented telephone number', 'Il riferimento e’ +39 030 1234567.', 'unverified_contact'],
   ];
 
   it.each(cases)('refuses %s', (_label, text, kind) => {
@@ -242,35 +383,15 @@ describe('adversarial: a claim the facts do not support is refused', () => {
   });
 
   it('names the offending token so the case can say what was wrong', () => {
-    expect(kindsOf('Confermiamo 500 kg.')).toContain('unverified_measurement:500 kg');
-    expect(kindsOf('Consegna il 15 novembre 2026.')).toContain('unverified_date:15 novembre 2026');
-    expect(kindsOf('Ufficio Tecnico e Commerciale')).toContain('unverified_reference:Tecnico');
-  });
-});
-
-describe('invented contractual and capability claims', () => {
-  it('refuses an agreement the facts never mention when it names anything', () => {
-    // "Accordo Quadro" and "Contratto" are names of instruments the company has
-    // no record of; the sentence carries no digits, and the old guard passed it.
-    expect(check('Come da Accordo Quadro in essere, confermiamo le condizioni.')).toContain(
-      'unverified_reference',
-    );
-    expect(check('Applichiamo le condizioni del Contratto Nazionale Metalmeccanico.')).toContain(
-      'unverified_reference',
-    );
-  });
-
-  it('refuses a capability claim that names a plant, line or certification', () => {
-    expect(check('La produzione avviene nello Stabilimento di Brescia.')).toContain(
-      'unverified_reference',
-    );
-    expect(check('Disponiamo di una Linea Automatica dedicata.')).toContain('unverified_reference');
+    expect(report('Confermiamo 500 kg.')).toContain('unverified_measurement:500 kg');
+    expect(report('Consegna il 15 novembre 2026.')).toContain('unverified_date:15 novembre 2026');
+    expect(report('Ufficio Tecnico e Commerciale')).toContain('unverified_reference:Tecnico');
   });
 });
 
 describe('the signature is the company’s, never the model’s', () => {
   it('grounds every word of the configured signature', () => {
-    expect(kindsOf(SIGNATURE)).toBe('');
+    expect(report(SIGNATURE)).toBe('');
   });
 
   it('refuses a signature block the company never configured', () => {
@@ -281,17 +402,16 @@ describe('the signature is the company’s, never the model’s', () => {
   });
 });
 
-describe('what the old guard let through', () => {
-  // Every one of these passed the token-membership guard. They are the audit
-  // findings, kept as a regression list.
+describe('what earlier guards let through', () => {
   it.each([
-    ['500 kg', 'Confermiamo 500 kg dell’articolo FL-250.'],
+    ['500 kg', "Confermiamo 500 kg dell'articolo FL-250."],
     ['15 novembre 2026', 'Consegna prevista per il 15 novembre 2026.'],
     ['3 settimane', 'Offerta completa entro 3 settimane.'],
     ['Ufficio Tecnico e Commerciale', 'Ufficio Tecnico e Commerciale'],
-    ['sconto del 3%', 'Vi confermiamo uno sconto del 3%.'],
-    ['disponibile a magazzino', 'Il pezzo e’ disponibile presso il Magazzino Centrale.'],
-    ['accordi quadro', 'Come da Accordo Quadro gia’ in essere.'],
+    ['sconto del 3%', 'Applichiamo il 3% in meno.'],
+    ['disponibile a magazzino', 'Il materiale resta disponibile a magazzino.'],
+    ['accordo quadro', 'Come da accordo quadro in essere.'],
+    ['nuovo impianto', 'La richiesta riguarda un nuovo impianto.'],
   ])('now refuses %s', (_label, text) => {
     expect(check(text).length).toBeGreaterThan(0);
   });

@@ -90,7 +90,12 @@ export async function demoSeed(
     for (const [key, value, why] of [
       ['reply_language', 'it', 'I clienti sono italiani.'],
       ['response_sla_hours', 24, 'Prima risposta entro un giorno lavorativo.'],
-      [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS, 3, 'Tempo tipico per un preventivo.'],
+      [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS, 3, 'Interno: tempo tipico per preparare un preventivo.'],
+      [
+        RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS,
+        3,
+        'Verso il cliente: ci impegniamo a rispondere entro tre giorni lavorativi.',
+      ],
       [RULE_KEYS.ACKNOWLEDGE_QUOTE_REQUESTS, true, 'Confermiamo sempre la ricezione.'],
     ] as const) {
       const saved = await container.workspace.configuration.setRule(scope, owner, key, value, why);

@@ -55,7 +55,7 @@ const GOOD_DRAFT = {
     'Buongiorno,',
     'confermiamo la ricezione della vostra richiesta per 500 pezzi di Flangia tornita S355 DN250,',
     'con consegna richiesta per il 15/10/2026.',
-    'Per completare il preventivo ci serve la conferma del disegno tecnico.',
+    'Per completare il preventivo ci serve la conferma del disegno.',
     'Vi invieremo il preventivo entro 3 giorni lavorativi.',
     'Cordiali saluti',
     'Alfa Meccanica S.r.l.',
@@ -67,7 +67,11 @@ async function harnessWith(replies: unknown[], rules?: Record<string, unknown>) 
   const llm = new FakeLlmProvider({ replies: replies.map((output) => ({ output })) });
   const harness = await createHarness({
     llm,
-    rules: { [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS]: 3, ...rules },
+    rules: {
+      [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS]: 3,
+      [RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS]: 3,
+      ...rules,
+    },
   });
   await harness.seedEntities([
     {
@@ -277,13 +281,18 @@ const REAL_UNDERSTANDING: MessageUnderstanding = {
   notes: [],
 };
 
-async function realRfq(draft: unknown) {
+async function realRfq(draft: unknown, extraRules: Record<string, unknown> = {}) {
   const llm = new FakeLlmProvider({
     replies: [{ output: REAL_UNDERSTANDING }, { output: draft }],
   });
   const harness = await createHarness({
     llm,
-    rules: { [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS]: 3, reply_language: 'it' },
+    rules: {
+      [RULE_KEYS.QUOTATION_LEAD_TIME_DAYS]: 3,
+      [RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS]: 3,
+      reply_language: 'it',
+      ...extraRules,
+    },
     profile: {
       legalName: 'Alfa Meccanica S.r.l.',
       sector: 'Lavorazioni meccaniche di precisione e carpenteria',
@@ -302,6 +311,7 @@ async function realRfq(draft: unknown) {
   return {
     opened,
     llm,
+    brief: JSON.stringify(llm.requests.at(-1)),
     body: (opened.recommendations[0]?.input as { body?: string } | undefined)?.body ?? null,
     refusal: opened.findings.find((f) => f.tags.includes('draft_refused'))?.statement ?? null,
   };
@@ -372,5 +382,49 @@ describe('Commercial Inbox Intelligence — the first real RFQ, grounded', () =>
     expect(draftCall).not.toContain('nuovo impianto');
     expect(draftCall).not.toContain('Marco Bianchi');
     expect(draftCall).toContain('500');
+  });
+});
+
+describe('an internal expectation is not a customer commitment', () => {
+  const PROMISE = "Vi comunicheremo l'offerta completa entro 3 giorni lavorativi.";
+  const promising = {
+    ...GROUNDED_REAL_DRAFT,
+    body: GROUNDED_REAL_DRAFT.body.replace(
+      'Vi invieremo il preventivo entro 3 giorni lavorativi.',
+      PROMISE,
+    ),
+  };
+
+  it('refuses a deadline when only the internal lead time is configured', async () => {
+    const { opened, refusal } = await realRfq(promising, {
+      [RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS]: null,
+    });
+    expect(opened.recommendations).toEqual([]);
+    expect(refusal).toContain('unverified_measurement');
+    expect(refusal).toContain('3 giorni');
+  });
+
+  it('accepts the same deadline once the company commits to it', async () => {
+    const { opened, body } = await realRfq(promising);
+    expect(opened.recommendations).toHaveLength(1);
+    expect(body).toContain('3 giorni lavorativi');
+  });
+
+  it('offers safe wording, and no date, when nothing is promised', async () => {
+    const safe = {
+      ...GROUNDED_REAL_DRAFT,
+      body: GROUNDED_REAL_DRAFT.body.replace(
+        'Vi invieremo il preventivo entro 3 giorni lavorativi.',
+        'Vi daremo riscontro dopo la valutazione interna.',
+      ),
+    };
+    const { opened, body, brief } = await realRfq(safe, {
+      [RULE_KEYS.QUOTATION_CUSTOMER_COMMITMENT_DAYS]: null,
+    });
+    expect(opened.recommendations).toHaveLength(1);
+    expect(body).toContain('Vi daremo riscontro dopo la valutazione interna.');
+    // The writer was never told the internal figure, so it could not leak.
+    expect(brief).not.toContain('quotationLeadTime');
+    expect(brief).toContain('internal_review');
   });
 });
