@@ -24,6 +24,7 @@ import {
   PersistedActionPolicy,
   PostgresAuditLogRepository,
   PostgresCaseRepository,
+  PostgresActionIntentRepository,
   PostgresCompanyProfileRepository,
   PostgresCompanyRuleRepository,
   PostgresDocumentRepository,
@@ -147,6 +148,7 @@ describe('cases on PostgreSQL', () => {
   let ingest: IngestDocument;
   const ledgerRepository = new PostgresLedgerRepository();
   const cases = new PostgresCaseRepository();
+  const actionIntents = new PostgresActionIntentRepository();
   const projection = new CaseProjection(cases);
   const documents = new PostgresDocumentRepository();
   const texts = new PostgresDocumentTextRepository();
@@ -239,6 +241,7 @@ describe('cases on PostgreSQL', () => {
       transactions,
       ledger,
       cases,
+      intents: actionIntents,
       projection,
       tools,
       policy,

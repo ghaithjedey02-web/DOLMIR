@@ -393,13 +393,19 @@ describe('Commercial Inbox Intelligence (e2e)', () => {
     expect(approved.statusCode).toBe(200);
     const result = approved.json<{
       recommendation: { status: string; decisionNote: string };
-      action: { status: string; tool: string };
+      action: { status: string; tool: string } | null;
     }>();
     expect(result.recommendation).toMatchObject({
       status: 'approved',
       decisionNote: 'Va bene, conferma la ricezione.',
     });
-    expect(result.action).toMatchObject({ status: 'succeeded', tool: 'send_mailbox_reply' });
+    // The approval committed and handed the work to a worker; nothing has been
+    // sent yet, and nothing depends on this request any more.
+    expect(result.action).toBeNull();
+    expect([...mailboxes.mailboxes.values()].flatMap((box) => box.sent)).toHaveLength(0);
+
+    const worked = await queue.drain();
+    expect(worked.failed).toBe(0);
 
     const sent = [...mailboxes.mailboxes.values()].flatMap((box) => box.sent);
     expect(sent).toHaveLength(1);

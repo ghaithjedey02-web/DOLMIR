@@ -185,12 +185,21 @@ export class InMemoryMembershipRepository implements MembershipRepository {
 /** A `TransactionRunner` for in-memory adapters: no transactions, just scopes. */
 export class InMemoryTransactionRunner {
   readonly systemScopeReasons: string[] = [];
+  /**
+   * Run when a scope ends, whether it succeeded or not. A test double that
+   * models a row lock releases it here, as committing or rolling back does.
+   */
+  readonly onScopeClosed: (() => void)[] = [];
 
   async withTenant<T>(
     tenantId: OrganizationId,
     fn: (scope: { kind: 'tenant'; tenantId: OrganizationId }) => Promise<T>,
   ): Promise<T> {
-    return fn({ kind: 'tenant', tenantId });
+    try {
+      return await fn({ kind: 'tenant', tenantId });
+    } finally {
+      for (const closed of this.onScopeClosed) closed();
+    }
   }
 
   async withSystemScope<T>(
@@ -198,6 +207,10 @@ export class InMemoryTransactionRunner {
     fn: (scope: { kind: 'system'; reason: string }) => Promise<T>,
   ): Promise<T> {
     this.systemScopeReasons.push(reason);
-    return fn({ kind: 'system', reason });
+    try {
+      return await fn({ kind: 'system', reason });
+    } finally {
+      for (const closed of this.onScopeClosed) closed();
+    }
   }
 }

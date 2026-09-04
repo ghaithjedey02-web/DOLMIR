@@ -17,7 +17,8 @@ import { requirePermission } from '../hooks.js';
  * The attention surface: what DOLMIR found, what it recommends, and the human
  * decisions on it. Reading a case needs only membership; deciding on a
  * recommendation needs `decisions:approve`, which no AI actor can hold, and the
- * approved action then runs under the approver's own permissions.
+ * approved action then runs under the approver's own permissions — in a worker,
+ * not in this request, so an approval that commits is work that will happen.
  */
 const ListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -122,12 +123,28 @@ export function caseRoutes(container: Container): (app: FastifyInstance) => Prom
         if (decision === 'reject' || !body.execute) {
           return { recommendation: decided.value, action: null };
         }
-        const executed = await container.cases.engine.execute(
+        // The approval is committed and the entitlement to act with it is
+        // durable, so the work no longer depends on this request: it is handed
+        // to a worker. `action` is present when the queue ran the handler
+        // before the response, and null when it has not run yet — the case
+        // carries the outcome either way.
+        await container.cases.engine.scheduleExecution(
           tenant.organizationId,
           params.recommendationId,
         );
-        if (!executed.ok) throw executed.error;
-        return { recommendation: decided.value, action: executed.value };
+        const action = await container.transactions.withTenant(
+          tenant.organizationId,
+          async (scope) => {
+            const actions = await container.cases.repository.listActions(
+              scope,
+              decided.value.caseId,
+            );
+            return (
+              actions.find((item) => item.recommendationId === params.recommendationId) ?? null
+            );
+          },
+        );
+        return { recommendation: decided.value, action };
       });
     }
 

@@ -1,4 +1,9 @@
-export type { CaseQuery, CaseRepository } from './ports.js';
+export type {
+  ActionIntentRepository,
+  CaseQuery,
+  CaseRepository,
+  ExecutionScheduler,
+} from './ports.js';
 export type {
   AiSystemDefinition,
   AnalysisInput,
@@ -6,7 +11,7 @@ export type {
   SystemContext,
 } from './ai-system.js';
 export { AiSystemRegistry } from './ai-system-registry.js';
-export { analyzeDocumentJob } from './jobs.js';
+export { analyzeDocumentJob, executeRecommendationJob, executionJobKey } from './jobs.js';
 export type {
   EvidenceVerification,
   EvidenceVerifier,

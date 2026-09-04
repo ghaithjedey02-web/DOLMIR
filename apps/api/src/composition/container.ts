@@ -14,6 +14,7 @@ import {
   type ConnectionRepository,
   CredentialCipher,
   DocumentEvidenceVerifier,
+  PostgresActionIntentRepository,
   type DocumentRepository,
   type DocumentTextRepository,
   EmailTextExtractor,
@@ -49,6 +50,8 @@ import {
   CORE_RULES,
   WorkspaceConfiguration,
   analyzeDocumentJob,
+  executeRecommendationJob,
+  executionJobKey,
   createSendMailboxReplyTool,
   mailboxPollJob,
   type AiUsageRepository,
@@ -467,12 +470,27 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
   );
 
   const caseRepository = new PostgresCaseRepository();
+  const actionIntents = new PostgresActionIntentRepository();
   const caseProjection = new CaseProjection(caseRepository);
   const caseEngine = new CaseEngine({
     transactions,
     ledger,
     cases: caseRepository,
+    intents: actionIntents,
     projection: caseProjection,
+    // Approved work reaches a worker through the queue, so it survives the
+    // request that approved it. The entitlement is already durable when this
+    // runs, so a queue that is briefly unavailable delays the reply; it never
+    // loses it.
+    scheduler: {
+      scheduleExecution: async (tenantId, recommendationId) => {
+        await jobQueue.enqueue(
+          executeRecommendationJob,
+          { tenantId, recommendationId },
+          { idempotencyKey: executionJobKey(recommendationId) },
+        );
+      },
+    },
     tools,
     policy: actionPolicy,
     executor,
@@ -520,6 +538,13 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
     await jobQueue.work(mailboxPollJob, async (payload) => {
       const report = await pollMailbox.execute(payload.tenantId, payload.connectionId);
       if (!report.ok) throw report.error;
+    });
+    // Carries out one authorised recommendation. The engine locks the
+    // entitlement, so a retry after success does nothing and two workers can
+    // never both act; a thrown failure is what makes the queue retry.
+    await jobQueue.work(executeRecommendationJob, async (payload) => {
+      const executed = await caseEngine.execute(payload.tenantId, payload.recommendationId);
+      if (!executed.ok) throw executed.error;
     });
   };
   const stopJobs = async (): Promise<void> => {

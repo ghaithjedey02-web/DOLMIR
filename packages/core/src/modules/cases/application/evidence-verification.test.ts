@@ -25,6 +25,7 @@ import {
 import { InMemoryObjectStorage } from '../../../infrastructure/storage/in-memory-object-storage.js';
 import { InMemoryActionPolicy, ToolExecutor, ToolRegistry } from '../../../ai/index.js';
 import { DocumentEvidenceVerifier } from '../adapters/evidence/document-evidence-verifier.js';
+import { InMemoryActionIntentRepository } from '../adapters/memory/in-memory-action-intent-repository.js';
 import { InMemoryCaseRepository } from '../adapters/memory/in-memory-case-repository.js';
 import { CaseEngine } from './case-engine.js';
 import { CaseProjection } from './case-projection.js';
@@ -87,6 +88,7 @@ async function setup() {
       context: noExecutionContext,
     }),
     cases,
+    intents: new InMemoryActionIntentRepository(),
     projection: new CaseProjection(cases),
     tools,
     policy: new InMemoryActionPolicy(),

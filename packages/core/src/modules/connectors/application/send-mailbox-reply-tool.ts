@@ -96,6 +96,10 @@ export function createSendMailboxReplyTool(
           text: input.body,
           ...(input.inReplyTo === undefined ? {} : { inReplyTo: input.inReplyTo }),
           ...(input.references.length === 0 ? {} : { references: input.references }),
+          // Carried from the approved action, so a retry is the same message.
+          ...(context.idempotencyKey === undefined
+            ? {}
+            : { idempotencyKey: context.idempotencyKey }),
         });
         if (!sent.ok) return err(sent.error);
         return ok({

@@ -1,5 +1,6 @@
-import type { CaseId, DocumentId } from '../../../kernel/ids.js';
+import type { CaseId, DocumentId, OrganizationId } from '../../../kernel/ids.js';
 import type { Scope, TenantScope } from '../../../kernel/scope.js';
+import type { ActionIntent, ActionIntentState } from '../domain/action-intent.js';
 import type {
   ActionRecord,
   Approval,
@@ -40,4 +41,50 @@ export interface CaseRepository {
   listActions(scope: Scope, caseId: CaseId): Promise<ActionRecord[]>;
   /** Empties the read model (rebuild). Requires a role that may delete. */
   reset(scope: Scope): Promise<void>;
+}
+
+/**
+ * The durable record of what the platform is entitled to execute, and the lock
+ * that makes an attempt exclusive. It is not a projection: it is written in
+ * the transaction that authorises the work, and it survives the process.
+ */
+export interface ActionIntentRepository {
+  /**
+   * Records the entitlement. Idempotent: a second call for the same
+   * recommendation leaves the first row untouched, so re-approving or
+   * re-opening cannot multiply the intent.
+   */
+  insert(scope: Scope, intent: ActionIntent): Promise<void>;
+  /**
+   * Takes the row for update inside the caller's transaction. A second caller
+   * blocks here until the first commits — that is the concurrency guarantee,
+   * enforced by the database rather than by any flag this process holds.
+   * `undefined` when no entitlement exists, or when it belongs to another
+   * tenant and row-level security hides it.
+   */
+  lock(scope: TenantScope, recommendationId: string): Promise<ActionIntent | undefined>;
+  find(scope: Scope, recommendationId: string): Promise<ActionIntent | undefined>;
+  /** Records the conclusion of one attempt, in the same transaction as its effects. */
+  settle(
+    scope: Scope,
+    recommendationId: string,
+    patch: {
+      readonly state: ActionIntentState;
+      readonly attempts: number;
+      readonly externalRef?: string | null;
+      readonly lastError?: string | null;
+      readonly updatedAt: Date;
+    },
+  ): Promise<void>;
+  /** Entitlements that have not reached a conclusion, for a retry sweep. */
+  listUnfinished(scope: TenantScope, limit: number): Promise<ActionIntent[]>;
+}
+
+/**
+ * How an authorised action reaches a worker. The composition root enqueues the
+ * job; the cases module does not know what a queue is — the same shape the
+ * connectors module uses to schedule analysis.
+ */
+export interface ExecutionScheduler {
+  scheduleExecution(tenantId: OrganizationId, recommendationId: string): Promise<void>;
 }

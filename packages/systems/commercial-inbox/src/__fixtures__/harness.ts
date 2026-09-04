@@ -21,6 +21,7 @@ import {
   InMemoryActionPolicy,
   InMemoryAuditLogRepository,
   InMemoryCaseRepository,
+  InMemoryActionIntentRepository,
   InMemoryConnectionRepository,
   InMemoryConnectionStore,
   InMemoryDocumentRepository,
@@ -221,11 +222,17 @@ async function buildHarness(options: HarnessOptions) {
   );
   const policy = new InMemoryActionPolicy();
   const cases = new InMemoryCaseRepository();
+  const actionIntents = new InMemoryActionIntentRepository();
+  // A scope ending releases whatever entitlement it held, as a commit does.
+  transactions.onScopeClosed.push(() => {
+    actionIntents.releaseAll();
+  });
   const projection = new CaseProjection(cases);
   const engine = new CaseEngine({
     transactions,
     ledger,
     cases,
+    intents: actionIntents,
     projection,
     tools,
     policy,

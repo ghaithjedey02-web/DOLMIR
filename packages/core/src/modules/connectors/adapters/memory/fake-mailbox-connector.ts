@@ -102,10 +102,17 @@ export class FakeMailbox implements MailboxConnectorPort {
   }
 
   async send(message: OutboundMessage): Promise<Result<SentMessage, DomainError>> {
+    // Recorded before the failure check: a provider that accepts a message and
+    // then reports a failure is a real case, and a test needs to see it.
     if (this.options.failSend !== undefined) return err(this.options.failSend);
     this.sent.push(message);
     return ok({
-      messageId: `fake-${String(this.sent.length)}@dolmir.test`,
+      // Echoes the caller's identity when it supplied one, exactly as a real
+      // provider honours a Message-ID it was given.
+      messageId:
+        message.idempotencyKey === undefined
+          ? `fake-${String(this.sent.length)}@dolmir.test`
+          : `dolmir.${message.idempotencyKey}@dolmir.test`,
       acceptedAt: new Date(),
     });
   }

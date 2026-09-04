@@ -206,6 +206,17 @@ export class ImapSmtpConnector implements MailboxConnectorPort {
           ...(message.references === undefined || message.references.length === 0
             ? {}
             : { references: message.references.map(angled) }),
+          // Derived from the authorised action rather than generated, so every
+          // attempt at the same send carries the same Message-ID and a
+          // duplicate keeps one identity for clients that collapse on it.
+          ...(message.idempotencyKey === undefined
+            ? {}
+            : {
+                messageId: deterministicMessageId(
+                  message.idempotencyKey,
+                  this.options.settings.from,
+                ),
+              }),
         }),
         'smtp.send',
       );
@@ -406,4 +417,16 @@ function mailError(code: string, message: string, cause: unknown): DomainError {
     // The provider's message can name a host; it never carries the credentials.
     details: { reason: cause instanceof Error ? cause.message.slice(0, 200) : 'unknown' },
   });
+}
+
+/**
+ * `<dolmir.<key>@<sending domain>>`. Stable for a given authorised action, and
+ * a legal RFC 5322 message identifier: the local part is restricted to
+ * characters an atom allows, and the domain is the address the mailbox sends
+ * from, so the identifier is globally unique to this company and this action.
+ */
+export function deterministicMessageId(idempotencyKey: string, from: string): string {
+  const domain = from.split('@').at(-1) ?? 'dolmir.invalid';
+  const local = idempotencyKey.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 120);
+  return `<dolmir.${local}@${domain}>`;
 }

@@ -107,6 +107,13 @@ export interface OutboundMessage {
   /** Message-ID this reply answers, so the customer's client threads it. */
   readonly inReplyTo?: string;
   readonly references?: readonly string[];
+  /**
+   * Stable identity of the action this message carries out. An adapter that
+   * can set a Message-ID derives one from it, so every attempt at the same
+   * authorised send carries the same identity and a duplicate is recognisable
+   * as one message rather than two.
+   */
+  readonly idempotencyKey?: string;
 }
 
 export interface SentMessage {

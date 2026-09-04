@@ -22,6 +22,7 @@ import {
   InMemoryTenancyStore,
   InMemoryTransactionRunner,
 } from '../../tenancy/index.js';
+import { InMemoryActionIntentRepository } from '../adapters/memory/in-memory-action-intent-repository.js';
 import { InMemoryCaseRepository } from '../adapters/memory/in-memory-case-repository.js';
 import { CaseEngine } from './case-engine.js';
 import { CaseProjection } from './case-projection.js';
@@ -95,6 +96,7 @@ function setup() {
   const ledgerRepository = new InMemoryLedgerRepository(clock);
   const ledger = new EventLedger({ repository: ledgerRepository, context: noExecutionContext });
   const cases = new InMemoryCaseRepository();
+  const intents = new InMemoryActionIntentRepository();
   const projection = new CaseProjection(cases);
   const tools = new ToolRegistry().register(sendReply).register(lookup);
   const policy = new InMemoryActionPolicy();
@@ -103,6 +105,7 @@ function setup() {
     transactions,
     ledger,
     cases,
+    intents,
     projection,
     tools,
     policy,
@@ -292,7 +295,9 @@ describe('CaseEngine', () => {
       organizationId,
       rejected.value.recommendations[0]!.id,
     );
-    expect(!cannotExecute.ok && cannotExecute.error.code).toBe('RECOMMENDATION_NOT_EXECUTABLE');
+    // A rejection never records an entitlement, so there is nothing to carry
+    // out — the refusal comes before the recommendation is even read.
+    expect(!cannotExecute.ok && cannotExecute.error.code).toBe('NO_EXECUTION_INTENT');
 
     const failing = await engine.openCase(
       organizationId,
@@ -305,10 +310,20 @@ describe('CaseEngine', () => {
       provenance,
     );
     if (!failing.ok) throw failing.error;
-    await engine.decide(operator, failing.value.recommendations[0]!.id, 'approved', null);
-    await expect(
-      engine.execute(organizationId, failing.value.recommendations[0]!.id),
-    ).rejects.toMatchObject({ code: 'SMTP_DOWN' });
+    const recommendationId = failing.value.recommendations[0]!.id;
+    await engine.decide(operator, recommendationId, 'approved', null);
+    // A transport failure is recorded rather than raised: raising it would roll
+    // back the very record of what went wrong. The caller gets a retryable
+    // failure, so the job tries again under the same entitlement.
+    const attempt = await engine.execute(organizationId, recommendationId);
+    expect(!attempt.ok && attempt.error.code).toBe('ACTION_FAILED');
+
+    const detail = await transactions.withTenant(organizationId, (scope) =>
+      engine.detail(scope, failing.value.case.id),
+    );
+    expect(detail?.case.status).toBe('awaiting_approval');
+    expect(detail?.actions).toMatchObject([{ status: 'failed', tool: 'send_reply' }]);
+    expect(detail?.actions[0]?.error).toMatchObject({ code: 'SMTP_DOWN' });
   });
 
   it('auto-executes when the company policy says so and blocks execution when it says SUGGEST', async () => {

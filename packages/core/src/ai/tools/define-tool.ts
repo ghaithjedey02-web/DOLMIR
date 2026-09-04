@@ -22,6 +22,12 @@ export interface ToolContext {
   readonly actor: Actor;
   /** The transaction the tool runs in; repositories take it as their first argument. */
   readonly scope: TenantScope;
+  /**
+   * Stable identity of this attempt, when the caller has one. A tool with an
+   * external effect passes it on, so a retry is recognisable as the same act
+   * rather than a new one. Absent for calls that are not retried.
+   */
+  readonly idempotencyKey?: string;
 }
 
 export interface ToolDefinition<I, O> {

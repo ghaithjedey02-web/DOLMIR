@@ -31,6 +31,8 @@ export interface ToolCall {
   readonly input: unknown;
   /** The model's call id, when the call comes from a model turn. */
   readonly callId?: string;
+  /** Stable across retries of the same authorised action; reaches the tool's context. */
+  readonly idempotencyKey?: string;
   readonly approval?: ApprovalRef;
 }
 
@@ -181,7 +183,10 @@ export class ToolExecutor {
     const started = this.deps.clock.now().getTime();
     let outcome: Awaited<ReturnType<AnyToolDefinition['handler']>>;
     try {
-      outcome = await tool.handler(input.data, context);
+      outcome = await tool.handler(input.data, {
+        ...context,
+        ...(call.idempotencyKey === undefined ? {} : { idempotencyKey: call.idempotencyKey }),
+      });
     } catch (thrown) {
       const error = toDomainError(thrown, 'TOOL_HANDLER_THREW');
       await this.audit(context, tool.name, 'failure', { ...policyDetails, error: brief(error) });

@@ -6,6 +6,7 @@ import {
   NotFoundError,
   PreconditionFailedError,
   ValidationError,
+  toDomainError,
   validationErrorFromZod,
 } from '../../../kernel/errors.js';
 import { type CaseId, type OrganizationId, newCaseId, newUuid } from '../../../kernel/ids.js';
@@ -34,10 +35,15 @@ import {
   type Finding,
   type Recommendation,
 } from '../domain/case.js';
+import {
+  type ActionIntent,
+  ActionIntentState,
+  actionIdempotencyKey,
+} from '../domain/action-intent.js';
 import { CASE_STREAM_TYPE, CaseEventType, CaseResolution } from '../domain/case-events.js';
 import type { CaseProjection } from './case-projection.js';
 import type { EvidenceVerifier } from './evidence-verifier.js';
-import type { CaseRepository } from './ports.js';
+import type { ActionIntentRepository, CaseRepository, ExecutionScheduler } from './ports.js';
 
 /**
  * The case engine (ADR-0012 §3): turns a system's draft into a case, drives
@@ -51,6 +57,8 @@ export interface CaseEngineDependencies {
   readonly transactions: TransactionRunner;
   readonly ledger: EventLedger;
   readonly cases: CaseRepository;
+  /** Where the entitlement to act is recorded and locked. */
+  readonly intents: ActionIntentRepository;
   readonly projection: CaseProjection;
   readonly tools: ToolRegistry;
   readonly policy: ActionPolicy;
@@ -68,6 +76,12 @@ export interface CaseEngineDependencies {
   readonly logger?: Logger;
   /** Role whose permissions AUTO_EXECUTE recommendations run with. Default `operator`. */
   readonly automationRole?: RoleKey;
+  /**
+   * Hands an authorised action to a worker once its transaction has committed.
+   * Absent in tests that drive execution themselves; the entitlement is
+   * durable either way, so a lost enqueue is recoverable rather than fatal.
+   */
+  readonly scheduler?: ExecutionScheduler;
 }
 
 export interface OpenCaseProvenance {
@@ -182,6 +196,13 @@ export class CaseEngine {
       if (!appended.ok) return err(appended.error);
       await this.applyAll(scope, appended.value);
       const opened = await this.loadOpened(scope, caseId);
+      // An AUTO_EXECUTE recommendation is authorised by the company's own
+      // policy rather than by a person, so its entitlement is recorded here,
+      // in the transaction that proposes it. Everything else waits for a human.
+      for (const recommendation of opened.recommendations) {
+        if (recommendation.level !== 'AUTO_EXECUTE') continue;
+        await this.recordIntent(scope, tenantId, recommendation);
+      }
       this.logger.info('case opened', {
         caseId,
         systemKey: provenance.systemKey,
@@ -255,22 +276,108 @@ export class CaseEngine {
       await this.applyAll(scope, appended.value);
       if (decision === 'rejected') await this.settle(scope, current.id);
       const updated = await this.deps.cases.findRecommendation(scope, recommendationId);
-      return updated === undefined
-        ? err(new NotFoundError('RECOMMENDATION_NOT_FOUND', 'The recommendation was not found.'))
-        : ok(updated);
+      if (updated === undefined) {
+        return err(
+          new NotFoundError('RECOMMENDATION_NOT_FOUND', 'The recommendation was not found.'),
+        );
+      }
+      // The entitlement is recorded in the very transaction that grants it, so
+      // an approval that commits is work that will happen: nothing downstream
+      // depends on this process, or this request, still being alive.
+      if (decision === 'approved') {
+        await this.recordIntent(scope, tenant.organizationId, updated);
+      }
+      return ok(updated);
     });
   }
 
   /**
-   * Executes an approved recommendation (or an AUTO_EXECUTE one) through the
-   * tool executor with the approval reference, records the action, and
-   * settles the case when nothing is pending.
+   * Records the platform's entitlement to carry out one recommendation.
+   * Idempotent, so re-approving or re-opening cannot multiply it.
+   */
+  private async recordIntent(
+    scope: TenantScope,
+    tenantId: OrganizationId,
+    recommendation: Recommendation,
+  ): Promise<void> {
+    const now = this.deps.clock.now();
+    const intent: ActionIntent = {
+      organizationId: tenantId,
+      recommendationId: recommendation.id,
+      caseId: recommendation.caseId,
+      tool: recommendation.tool,
+      inputHash: recommendation.inputHash,
+      idempotencyKey: actionIdempotencyKey(recommendation.id, recommendation.inputHash),
+      state: ActionIntentState.PENDING,
+      attempts: 0,
+      externalRef: null,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.deps.intents.insert(scope, intent);
+  }
+
+  /**
+   * Hands an authorised recommendation to a worker. Called after the granting
+   * transaction has committed, so the queue never learns about work that was
+   * rolled back. A scheduler failure is logged, not raised: the entitlement is
+   * already durable, and a sweep can pick it up.
+   */
+  async scheduleExecution(tenantId: OrganizationId, recommendationId: string): Promise<void> {
+    const scheduler = this.deps.scheduler;
+    if (scheduler === undefined) return;
+    try {
+      await scheduler.scheduleExecution(tenantId, recommendationId);
+    } catch (error) {
+      this.logger.error('could not schedule an approved execution', {
+        recommendationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Carries out one authorised recommendation, exactly once.
+   *
+   * The whole attempt runs in a single tenant transaction that begins by
+   * locking the entitlement row. That lock is the concurrency guarantee: a
+   * second worker waits in PostgreSQL until this one commits, and then finds
+   * the terminal state and does nothing. There is no flag in this process to
+   * race, and no window in which two workers both believe they may act.
+   *
+   * Everything the entitlement asserts is re-checked here rather than trusted
+   * from the payload: that the recommendation still exists, that it is still
+   * executable, that its input still hashes to what was approved, and that a
+   * real approval record backs it. The action then runs under the approver's
+   * own permissions.
+   *
+   * Retries are safe. A committed failure leaves the entitlement retryable
+   * under the same identity; a committed success makes every later attempt a
+   * no-op that returns the original action. The one thing this cannot cover is
+   * a crash between the provider accepting the message and the commit: the
+   * transaction rolls back and the retry sends again, carrying the same
+   * idempotency key so the duplicate keeps one identity. Exactly-once delivery
+   * across SMTP and PostgreSQL is not achievable, and is not claimed.
    */
   async execute(
     tenantId: OrganizationId,
     recommendationId: string,
   ): Promise<Result<ActionRecord, DomainError>> {
     return this.deps.transactions.withTenant(tenantId, async (scope) => {
+      // Blocks while another worker holds this entitlement.
+      const intent = await this.deps.intents.lock(scope, recommendationId);
+      if (intent === undefined) {
+        // No entitlement, or one belonging to another tenant that row-level
+        // security hides. Both answers are the same, and both refuse.
+        return err(
+          new PreconditionFailedError(
+            'NO_EXECUTION_INTENT',
+            'Nothing authorises executing this recommendation.',
+          ),
+        );
+      }
+
       const recommendation = await this.deps.cases.findRecommendation(scope, recommendationId);
       if (recommendation === undefined) {
         return err(
@@ -278,9 +385,42 @@ export class CaseEngine {
         );
       }
       const current = await this.requireCase(scope, recommendation.caseId);
+
+      if (intent.state === ActionIntentState.SENT) {
+        // Already carried out. Return what happened rather than doing it again.
+        const actions = await this.deps.cases.listActions(scope, current.id);
+        const done = actions.find(
+          (action) => action.recommendationId === recommendationId && action.status === 'succeeded',
+        );
+        if (done !== undefined) return ok(done);
+        return err(
+          new PreconditionFailedError(
+            'ACTION_ALREADY_EXECUTED',
+            'This recommendation was already executed.',
+          ),
+        );
+      }
+
+      // The entitlement covers one exact input. A recommendation that no longer
+      // hashes to it is a different action, and was never approved.
+      if (recommendation.inputHash !== intent.inputHash) {
+        const stale = new PreconditionFailedError(
+          'STALE_EXECUTION_INTENT',
+          'What was authorised is not what this recommendation now says.',
+          { details: { approved: intent.inputHash, current: recommendation.inputHash } },
+        );
+        await this.failIntent(scope, intent, stale);
+        return err(stale);
+      }
+
       let approval: ApprovalRef | undefined;
       let tenant: TenantContext;
-      if (recommendation.status === 'approved') {
+      // `failed` records what the last attempt did, not a withdrawal of the
+      // approval: the entitlement still stands, so a retry is allowed exactly
+      // while it has not succeeded.
+      const retryingAfterFailure =
+        recommendation.status === 'failed' && intent.state === ActionIntentState.FAILED;
+      if (recommendation.status === 'approved' || retryingAfterFailure) {
         const approvals = await this.deps.cases.listApprovals(scope, current.id);
         const granted = approvals.find(
           (a) => a.recommendationId === recommendation.id && a.decision === 'approved',
@@ -318,24 +458,44 @@ export class CaseEngine {
         );
       }
 
-      const outcome = await this.deps.executor.execute(
-        {
-          tenant,
-          actor: {
-            ...ENGINE_ACTOR,
-            ...(approval === undefined ? {} : { onBehalfOf: tenant.userId }),
+      // The executor re-raises an infrastructure failure so a caller can retry.
+      // Here that would roll the attempt back and take the record of the
+      // failure with it, so it is caught and recorded instead: what went wrong
+      // belongs on the case, and the job still retries because this returns a
+      // retryable failure of its own.
+      let outcome: Awaited<ReturnType<ToolExecutor['execute']>>;
+      try {
+        outcome = await this.deps.executor.execute(
+          {
+            tenant,
+            actor: {
+              ...ENGINE_ACTOR,
+              ...(approval === undefined ? {} : { onBehalfOf: tenant.userId }),
+            },
+            scope,
+            // Carried to the outside world so every attempt keeps one identity.
+            idempotencyKey: intent.idempotencyKey,
           },
-          scope,
-        },
-        {
-          name: recommendation.tool,
-          input: recommendation.input,
+          {
+            name: recommendation.tool,
+            input: recommendation.input,
+            callId: recommendation.id,
+            idempotencyKey: intent.idempotencyKey,
+            ...(approval === undefined ? {} : { approval }),
+          },
+        );
+      } catch (thrown) {
+        const failure = toDomainError(thrown, 'TOOL_EXECUTION_FAILED');
+        outcome = {
+          status: 'error',
+          tool: recommendation.tool,
           callId: recommendation.id,
-          ...(approval === undefined ? {} : { approval }),
-        },
-      );
+          error: failure.toRecord(),
+        };
+      }
       const actionId = newUuid();
       const succeeded = outcome.status === 'ok';
+      const output = outcome.status === 'ok' ? outcome.output : undefined;
       const appended = await this.deps.ledger.append(
         scope,
         { type: CASE_STREAM_TYPE, id: current.id },
@@ -349,7 +509,7 @@ export class CaseEngine {
                   recommendationId: recommendation.id,
                   tool: recommendation.tool,
                   inputHash: recommendation.inputHash,
-                  result: outcome.output,
+                  result: output,
                 }
               : {
                   actionId,
@@ -391,12 +551,45 @@ export class CaseEngine {
       );
       if (!appended.ok) return err(appended.error);
       await this.applyAll(scope, appended.value);
+      // The conclusion of the attempt lands in the same commit as its effects,
+      // so the record and the state can never disagree.
+      await this.deps.intents.settle(scope, recommendationId, {
+        state: succeeded ? ActionIntentState.SENT : ActionIntentState.FAILED,
+        attempts: intent.attempts + 1,
+        externalRef: succeeded ? externalRefOf(output) : null,
+        lastError: succeeded ? null : describeOutcome(outcome),
+        updatedAt: this.deps.clock.now(),
+      });
       await this.settle(scope, current.id);
       const actions = await this.deps.cases.listActions(scope, current.id);
       const action = actions.find((a) => a.id === actionId);
-      return action === undefined
-        ? err(new NotFoundError('ACTION_NOT_FOUND', 'The action record was not found.'))
-        : ok(action);
+      if (action === undefined) {
+        return err(new NotFoundError('ACTION_NOT_FOUND', 'The action record was not found.'));
+      }
+      // A failure is returned as a value, not thrown: the caller (a job) fails
+      // the attempt so the queue retries it under the same identity.
+      return succeeded
+        ? ok(action)
+        : err(
+            new PreconditionFailedError('ACTION_FAILED', 'The action did not succeed.', {
+              details: { recommendationId, attempts: intent.attempts + 1 },
+              retryable: true,
+            }),
+          );
+    });
+  }
+
+  /** Records a refusal that is not worth retrying, so the entitlement stops looking pending. */
+  private async failIntent(
+    scope: TenantScope,
+    intent: ActionIntent,
+    error: DomainError,
+  ): Promise<void> {
+    await this.deps.intents.settle(scope, intent.recommendationId, {
+      state: ActionIntentState.FAILED,
+      attempts: intent.attempts + 1,
+      lastError: `${error.code}: ${error.message}`.slice(0, 2000),
+      updatedAt: this.deps.clock.now(),
     });
   }
 
@@ -643,3 +836,18 @@ export class CaseEngine {
 
 /** Placeholder user id for automation; never a real membership. */
 const ENGINE_USER_ID = '00000000-0000-0000-0000-000000000000' as TenantContext['userId'];
+
+/** The provider's own name for what it accepted, when the tool reports one. */
+function externalRefOf(output: unknown): string | null {
+  if (typeof output !== 'object' || output === null) return null;
+  const record = output as Record<string, unknown>;
+  const messageId = record['messageId'];
+  return typeof messageId === 'string' && messageId.length > 0 ? messageId.slice(0, 500) : null;
+}
+
+/** A short, non-secret description of why an attempt did not succeed. */
+function describeOutcome(outcome: { readonly status: string }): string {
+  const record = outcome as { readonly status: string; readonly error?: { code?: unknown } };
+  const code = typeof record.error?.code === 'string' ? record.error.code : undefined;
+  return (code === undefined ? outcome.status : `${outcome.status}: ${code}`).slice(0, 2000);
+}
