@@ -78,6 +78,14 @@ export interface ActionIntentRepository {
   ): Promise<void>;
   /** Entitlements that have not reached a conclusion, for a retry sweep. */
   listUnfinished(scope: TenantScope, limit: number): Promise<ActionIntent[]>;
+  /**
+   * The tenants holding unfinished work, and nothing else about it. A recovery
+   * sweep runs across tenants and so needs a system scope, which is exactly
+   * why this returns identifiers rather than rows: the sweep learns which
+   * tenants to visit, and reads their entitlements inside their own scope,
+   * under row-level security, through `listUnfinished`.
+   */
+  listTenantsWithUnfinished(scope: Scope, limit: number): Promise<OrganizationId[]>;
 }
 
 /**

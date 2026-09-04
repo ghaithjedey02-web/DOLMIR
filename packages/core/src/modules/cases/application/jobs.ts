@@ -43,3 +43,28 @@ export const executeRecommendationJob = defineJob({
 export function executionJobKey(recommendationId: string): string {
   return `execute:${recommendationId}`;
 }
+
+/**
+ * Recovery (ADR-0014). An entitlement is durable the moment an approval
+ * commits, but the enqueue that follows it is not: a queue outage, a lost
+ * acknowledgement or a process dying between the two leaves work authorised
+ * and nobody carrying it out. This sweep is the answer — it re-enqueues what
+ * is unfinished and nothing else.
+ *
+ * It creates no entitlement and performs no action of its own. Everything it
+ * finds goes through the ordinary worker, which locks the row and refuses to
+ * repeat what has already been done, so running it twice is the same as
+ * running it once.
+ */
+export const recoverExecutionsJob = defineJob({
+  name: 'cases.recover_executions',
+  payload: z.object({}).strict(),
+  // A sweep that fails is superseded by the next tick; piling up retries of a
+  // scan helps nobody.
+  retryLimit: 1,
+  retryDelaySeconds: 60,
+  expireInSeconds: 5 * 60,
+});
+
+/** How often recovery runs when the queue evaluates cron expressions. */
+export const RECOVERY_CRON = '*/5 * * * *';

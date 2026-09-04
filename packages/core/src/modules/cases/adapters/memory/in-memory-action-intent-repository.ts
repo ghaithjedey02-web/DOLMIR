@@ -1,4 +1,5 @@
 import { ForbiddenError } from '../../../../kernel/errors.js';
+import type { OrganizationId } from '../../../../kernel/ids.js';
 import type { Scope, TenantScope } from '../../../../kernel/scope.js';
 import type { ActionIntentRepository } from '../../application/ports.js';
 import type { ActionIntent, ActionIntentState } from '../../domain/action-intent.js';
@@ -72,6 +73,16 @@ export class InMemoryActionIntentRepository implements ActionIntentRepository {
       lastError: patch.lastError ?? null,
       updatedAt: patch.updatedAt,
     });
+  }
+
+  async listTenantsWithUnfinished(scope: Scope, limit: number): Promise<OrganizationId[]> {
+    const tenants = new Set<OrganizationId>();
+    for (const intent of this.intents.values()) {
+      if (intent.state === 'sent') continue;
+      if (!visible(scope, intent.organizationId)) continue;
+      tenants.add(intent.organizationId);
+    }
+    return [...tenants].sort().slice(0, limit);
   }
 
   async listUnfinished(scope: TenantScope, limit: number): Promise<ActionIntent[]> {

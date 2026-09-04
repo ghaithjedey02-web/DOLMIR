@@ -11,7 +11,18 @@ export type {
   SystemContext,
 } from './ai-system.js';
 export { AiSystemRegistry } from './ai-system-registry.js';
-export { analyzeDocumentJob, executeRecommendationJob, executionJobKey } from './jobs.js';
+export {
+  RECOVERY_CRON,
+  analyzeDocumentJob,
+  executeRecommendationJob,
+  executionJobKey,
+  recoverExecutionsJob,
+} from './jobs.js';
+export {
+  RecoverExecutions,
+  type RecoverExecutionsDependencies,
+  type RecoveryReport,
+} from './recover-executions.js';
 export type {
   EvidenceVerification,
   EvidenceVerifier,

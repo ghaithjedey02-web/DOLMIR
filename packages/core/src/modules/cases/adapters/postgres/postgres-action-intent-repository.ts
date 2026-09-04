@@ -2,7 +2,12 @@ import { z } from 'zod';
 
 import { translatePgError } from '../../../../infrastructure/postgres/errors.js';
 import { clientOf } from '../../../../infrastructure/postgres/transaction-runner.js';
-import { OrganizationIdSchema, CaseIdSchema, UuidSchema } from '../../../../kernel/ids.js';
+import {
+  CaseIdSchema,
+  type OrganizationId,
+  OrganizationIdSchema,
+  UuidSchema,
+} from '../../../../kernel/ids.js';
 import { validationErrorFromZod } from '../../../../kernel/errors.js';
 import type { Scope, TenantScope } from '../../../../kernel/scope.js';
 import type { ActionIntentRepository } from '../../application/ports.js';
@@ -154,6 +159,29 @@ export class PostgresActionIntentRepository implements ActionIntentRepository {
           patch.lastError ?? null,
           patch.updatedAt,
         ],
+      );
+    } catch (error) {
+      throw translatePgError(error);
+    }
+  }
+
+  /**
+   * Runs in a system scope, which `dolmir.tenant_access` permits, and returns
+   * organisation identifiers only — never an entitlement, never an input hash,
+   * never a recommendation. The sweep learns where to look and then looks
+   * inside each tenant's own scope.
+   */
+  async listTenantsWithUnfinished(scope: Scope, limit: number): Promise<OrganizationId[]> {
+    try {
+      const result = await clientOf(scope).query(
+        `SELECT DISTINCT organization_id FROM public.action_intents
+          WHERE state <> 'sent'
+          ORDER BY organization_id
+          LIMIT $1`,
+        [limit],
+      );
+      return result.rows.map((row: unknown) =>
+        OrganizationIdSchema.parse((row as { organization_id: unknown }).organization_id),
       );
     } catch (error) {
       throw translatePgError(error);

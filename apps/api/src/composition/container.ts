@@ -49,11 +49,15 @@ import {
   RuleRegistry,
   CORE_RULES,
   WorkspaceConfiguration,
+  RECOVERY_CRON,
+  RecoverExecutions,
   analyzeDocumentJob,
   executeRecommendationJob,
   executionJobKey,
+  type ExecutionScheduler,
   createSendMailboxReplyTool,
   mailboxPollJob,
+  recoverExecutionsJob,
   type AiUsageRepository,
   type AuditLogRepository,
   AuditTrail,
@@ -471,6 +475,18 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
 
   const caseRepository = new PostgresCaseRepository();
   const actionIntents = new PostgresActionIntentRepository();
+  // The one way an authorised action reaches a worker, used by the approval
+  // path and by recovery alike — same job, same key, so neither can duplicate
+  // what the other already asked for.
+  const executionScheduler: ExecutionScheduler = {
+    scheduleExecution: async (tenantId, recommendationId) => {
+      await jobQueue.enqueue(
+        executeRecommendationJob,
+        { tenantId, recommendationId },
+        { idempotencyKey: executionJobKey(recommendationId) },
+      );
+    },
+  };
   const caseProjection = new CaseProjection(caseRepository);
   const caseEngine = new CaseEngine({
     transactions,
@@ -482,15 +498,7 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
     // request that approved it. The entitlement is already durable when this
     // runs, so a queue that is briefly unavailable delays the reply; it never
     // loses it.
-    scheduler: {
-      scheduleExecution: async (tenantId, recommendationId) => {
-        await jobQueue.enqueue(
-          executeRecommendationJob,
-          { tenantId, recommendationId },
-          { idempotencyKey: executionJobKey(recommendationId) },
-        );
-      },
-    },
+    scheduler: executionScheduler,
     tools,
     policy: actionPolicy,
     executor,
@@ -500,6 +508,14 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
     logger,
     evidence: new DocumentEvidenceVerifier(documentTexts),
   });
+  const recoverExecutions = new RecoverExecutions({
+    transactions,
+    intents: actionIntents,
+    scheduler: executionScheduler,
+    logger,
+    telemetry,
+  });
+
   const analyzeDocument = new AnalyzeDocument({
     transactions,
     documents: documentRepository,
@@ -546,6 +562,19 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
       const executed = await caseEngine.execute(payload.tenantId, payload.recommendationId);
       if (!executed.ok) throw executed.error;
     });
+    // Recovery closes the gap between committing an entitlement and enqueueing
+    // the work for it: a queue outage, a lost enqueue or a process that died in
+    // between leaves authorised work that nobody would otherwise do.
+    await jobQueue.work(recoverExecutionsJob, async () => {
+      await recoverExecutions.execute();
+    });
+    await jobQueue.schedule(recoverExecutionsJob, RECOVERY_CRON, {});
+    // And once now, because a process that has just started is exactly the
+    // case a periodic schedule is slowest to notice.
+    const recovered = await recoverExecutions.execute();
+    if (recovered.found > 0) {
+      logger.info('recovered unfinished executions at startup', { ...recovered });
+    }
   };
   const stopJobs = async (): Promise<void> => {
     if (jobQueue instanceof PgBossJobQueue) await jobQueue.stop();
