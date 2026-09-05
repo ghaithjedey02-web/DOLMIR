@@ -2,11 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { FixedClock } from '../../kernel/clock.js';
-import { defineJob } from '../../kernel/jobs.js';
+import { JobConcurrency, defineJob } from '../../kernel/jobs.js';
 import { InMemoryJobQueue } from './in-memory-job-queue.js';
 
 const greet = defineJob({
   name: 'test.greet',
+  payload: z.object({ who: z.string().min(1) }).strict(),
+  retryLimit: 1,
+  concurrency: JobConcurrency.ONE_AT_A_TIME,
+});
+/** Declares that it may run alongside itself, so a key deduplicates nothing. */
+const parallel = defineJob({
+  name: 'test.parallel',
   payload: z.object({ who: z.string().min(1) }).strict(),
   retryLimit: 1,
 });
@@ -46,6 +53,22 @@ describe('InMemoryJobQueue', () => {
     expect(
       (await queue.enqueue(greet, { who: 'a' }, { idempotencyKey: 'greet:a' })).deduplicated,
     ).toBe(false);
+  });
+
+  it('deduplicates only what its job declared, matching what pg-boss enforces', async () => {
+    const queue = new InMemoryJobQueue();
+
+    // A job that may run alongside itself is not deduplicated by a key. This
+    // mirrors pg-boss, where the queue's policy — not the key — decides, and
+    // keeps the in-memory queue from promising more than production delivers.
+    const one = await queue.enqueue(parallel, { who: 'a' }, { idempotencyKey: 'k' });
+    const two = await queue.enqueue(parallel, { who: 'a' }, { idempotencyKey: 'k' });
+    expect(one.deduplicated).toBe(false);
+    expect(two.deduplicated).toBe(false);
+
+    // A one-at-a-time job with no key is one at a time for the whole job.
+    expect((await queue.enqueue(greet, { who: 'a' })).deduplicated).toBe(false);
+    expect((await queue.enqueue(greet, { who: 'b' })).deduplicated).toBe(true);
   });
 
   it('retries a failing job up to its limit, then fails it; unknown jobs fail at once', async () => {

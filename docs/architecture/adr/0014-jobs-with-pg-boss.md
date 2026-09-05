@@ -25,5 +25,7 @@ One database keeps transactions, backups and tenancy simple; pg-boss gives retri
 
 ## Consequences
 
-- Deployments run `dolmir jobs:migrate` (owner connection) before starting the API.
+- Deployments run `dolmir jobs:install` (owner connection) before starting the API. The command creates the schema, one queue per job in `PLATFORM_JOBS`, and the runtime grants.
+- A job declares its `concurrency`. `ONE_AT_A_TIME` is what makes `idempotencyKey` mean what the port says: pg-boss holds any number of identical jobs unless the queue is created with an `exclusive` policy, so the declaration is carried into `createQueue`. A queue's policy cannot be changed in place, so an install that finds the wrong one stops rather than proceed.
+- The API process is the worker process: it starts the background runtime before it listens, and does not listen if that fails.
 - Job names are part of the platform vocabulary; systems enqueue only through Core use cases.

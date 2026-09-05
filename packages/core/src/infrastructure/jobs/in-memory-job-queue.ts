@@ -4,6 +4,7 @@ import { newUuid } from '../../kernel/ids.js';
 import {
   type EnqueueOptions,
   InvalidJobPayloadError,
+  JobConcurrency,
   type JobContext,
   type JobDefinition,
   type JobHandler,
@@ -71,7 +72,11 @@ export class InMemoryJobQueue implements JobQueuePort {
     options: EnqueueOptions = {},
   ): Promise<JobRef> {
     const validated = parseJobPayload(job, payload);
-    if (options.idempotencyKey !== undefined) {
+    // The same rule the pg-boss adapter gets from an `exclusive` queue, so a
+    // test cannot pass on a promise production does not keep: a `ONE_AT_A_TIME`
+    // job that is already outstanding answers with the job that exists, keyed
+    // when a key was given and per job name when it was not.
+    if (job.concurrency === JobConcurrency.ONE_AT_A_TIME) {
       const existing = this.jobs.find(
         (item) =>
           item.name === job.name &&

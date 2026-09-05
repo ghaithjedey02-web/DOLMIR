@@ -3,6 +3,7 @@ import { type Db, PgBoss } from 'pg-boss';
 import { InfrastructureError } from '../../kernel/errors.js';
 import {
   type EnqueueOptions,
+  JobConcurrency,
   type JobDefinition,
   type JobHandler,
   type JobName,
@@ -152,7 +153,7 @@ export interface JobQueueInstallOptions {
   readonly runtimeRole: string;
   readonly jobs: readonly Pick<
     JobDefinition<object>,
-    'name' | 'retryLimit' | 'retryDelaySeconds' | 'expireInSeconds'
+    'name' | 'retryLimit' | 'retryDelaySeconds' | 'expireInSeconds' | 'concurrency'
   >[];
   readonly logger?: Logger;
 }
@@ -164,7 +165,7 @@ export interface JobQueueInstallReport {
   readonly queuesUpdated: readonly string[];
 }
 
-/** Deploy-time installation with the owner connection (`dolmir jobs:migrate`). */
+/** Deploy-time installation with the owner connection (`dolmir jobs:install`). */
 export async function installJobQueue(
   options: JobQueueInstallOptions,
 ): Promise<JobQueueInstallReport> {
@@ -195,11 +196,23 @@ export async function installJobQueue(
         retryBackoff: true,
         expireInSeconds: job.expireInSeconds,
       };
+      const policy = policyFor(job.concurrency);
       const existing = await boss.getQueue(job.name);
       if (existing === null) {
-        await boss.createQueue(job.name, queueOptions);
+        await boss.createQueue(job.name, { ...queueOptions, policy });
         queuesCreated.push(job.name);
       } else {
+        // pg-boss fixes a queue's policy at creation: `updateQueue` cannot
+        // change it. Saying nothing here would leave a queue that silently
+        // accepts the duplicates its jobs declared it must not, so this stops
+        // the install instead. The remedy is to drain and drop the queue.
+        if (existing.policy !== policy) {
+          throw new InfrastructureError(
+            'JOB_QUEUE_POLICY_MISMATCH',
+            `Queue ${job.name} exists with policy "${String(existing.policy)}" but must be "${policy}"; drop it once it is drained and install again.`,
+            { details: { job: job.name, found: existing.policy ?? null, expected: policy } },
+          );
+        }
         await boss.updateQueue(job.name, queueOptions);
         queuesUpdated.push(job.name);
       }
@@ -218,6 +231,21 @@ export async function installJobQueue(
   }
 }
 
+/**
+ * DOLMIR's concurrency vocabulary in pg-boss's.
+ *
+ * `exclusive` is "one job queued or active", extended by `singletonKey` when
+ * one is given — which is exactly what `ONE_AT_A_TIME` promises. The default
+ * `standard` policy holds any number of identical jobs, so a queue left on it
+ * would accept a second execution of a recommendation that is already being
+ * carried out. That is safe (the entitlement row is locked and the second
+ * attempt does nothing) but it is not what the port says, and a promise the
+ * adapter does not keep is worse than no promise.
+ */
+function policyFor(concurrency: JobConcurrency): 'standard' | 'exclusive' {
+  return concurrency === JobConcurrency.ONE_AT_A_TIME ? 'exclusive' : 'standard';
+}
+
 async function grantRuntimeAccess(db: Db, schema: string, role: string): Promise<void> {
   // Both identifiers were validated against IDENTIFIER above; they are never user input.
   const statements = [
@@ -232,6 +260,36 @@ async function grantRuntimeAccess(db: Db, schema: string, role: string): Promise
   for (const statement of statements) {
     await db.executeSql(statement);
   }
+}
+
+/**
+ * The role the runtime will connect as, read from the runtime connection URL.
+ *
+ * Installation needs two connections that are deliberately different: the
+ * owner creates the schema and the queues, and the runtime role is granted
+ * what it needs inside them. Rather than ask an operator to name that role a
+ * second time — and get it wrong — it is taken from the connection the runtime
+ * itself uses. The result must be a plain lowercase identifier, which is also
+ * what makes it safe to interpolate into a GRANT.
+ */
+export function runtimeRoleFromConnectionString(connectionString: string): string {
+  let username: string;
+  try {
+    username = decodeURIComponent(new URL(connectionString).username);
+  } catch {
+    throw new InfrastructureError(
+      'INVALID_JOBS_RUNTIME_ROLE',
+      'The runtime database URL could not be parsed, so the role to grant is unknown.',
+    );
+  }
+  if (username === '') {
+    throw new InfrastructureError(
+      'INVALID_JOBS_RUNTIME_ROLE',
+      'The runtime database URL carries no user, so the role to grant is unknown.',
+    );
+  }
+  assertIdentifier(username, 'runtime role');
+  return username;
 }
 
 function assertIdentifier(value: string, what: string): void {

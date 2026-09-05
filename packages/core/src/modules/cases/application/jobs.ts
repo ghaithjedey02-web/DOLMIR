@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { DocumentIdSchema, OrganizationIdSchema, UuidSchema } from '../../../kernel/ids.js';
-import { defineJob } from '../../../kernel/jobs.js';
+import { JobConcurrency, defineJob } from '../../../kernel/jobs.js';
 
 /**
  * Analysis runs in the background (ADR-0014): ingestion returns as soon as the
@@ -19,6 +19,9 @@ export const analyzeDocumentJob = defineJob({
   retryLimit: 3,
   retryDelaySeconds: 30,
   expireInSeconds: 10 * 60,
+  // One analysis per document at a time: the second would open no case and
+  // spend a model call finding that out.
+  concurrency: JobConcurrency.ONE_AT_A_TIME,
 });
 
 /**
@@ -37,6 +40,9 @@ export const executeRecommendationJob = defineJob({
   retryLimit: 5,
   retryDelaySeconds: 30,
   expireInSeconds: 10 * 60,
+  // The queue key is the recommendation, so this is what makes approving twice
+  // — or approving and then recovering — ask for one execution, not two.
+  concurrency: JobConcurrency.ONE_AT_A_TIME,
 });
 
 /** The queue key of an execution: one in flight per recommendation, however often it is asked for. */
@@ -64,6 +70,10 @@ export const recoverExecutionsJob = defineJob({
   retryLimit: 1,
   retryDelaySeconds: 60,
   expireInSeconds: 5 * 60,
+  // No key, so this is one sweep at a time across the whole deployment: a tick
+  // that arrives while the previous sweep is still running is dropped rather
+  // than run alongside it.
+  concurrency: JobConcurrency.ONE_AT_A_TIME,
 });
 
 /** How often recovery runs when the queue evaluates cron expressions. */

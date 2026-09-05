@@ -11,4 +11,5 @@ export {
   PgBossJobQueue,
   type PgBossJobQueueOptions,
   installJobQueue,
+  runtimeRoleFromConnectionString,
 } from './pg-boss-job-queue.js';

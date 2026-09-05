@@ -1,9 +1,16 @@
 import { parseArgs } from 'node:util';
 
-import { Migrator, loadConfig, noopLogger } from '@dolmir/core';
+import {
+  Migrator,
+  installJobQueue,
+  loadConfig,
+  noopLogger,
+  runtimeRoleFromConnectionString,
+} from '@dolmir/core';
 
 import { type Container, createContainer } from '../composition/container.js';
 import { readEnvironment } from '../composition/env.js';
+import { PLATFORM_JOBS } from '../composition/jobs.js';
 import { demoCase, demoCases, demoDecide, demoSeed, demoSend } from './demo.js';
 
 /**
@@ -11,12 +18,14 @@ import { demoCase, demoCases, demoDecide, demoSeed, demoSend } from './demo.js';
  * problems instead of stack traces. Secrets are never printed.
  *
  *   dolmir migrate                          apply pending migrations (owner connection)
+ *   dolmir jobs:install                     create the job queue schema and queues (owner connection)
  *   dolmir doctor                           configuration, database, role, migrations, AI provider
  *   dolmir dev-token --subject <sub> [--email <e>] [--name <n>] [--ttl-seconds <s>]
  *   dolmir provision-org --slug <s> --name <n> --owner-subject <sub> [--owner-email <e>] [--owner-name <n>]
  */
 const USAGE = `usage:
   dolmir migrate
+  dolmir jobs:install [--role <name>]
   dolmir doctor
   dolmir dev-token --subject <sub> [--email <e>] [--name <n>] [--ttl-seconds <s>]
   dolmir provision-org --slug <s> --name <n> --owner-subject <sub> [--owner-email <e>] [--owner-name <n>]
@@ -68,6 +77,57 @@ async function migrate(): Promise<void> {
       applied.length === 0
         ? 'migrations: nothing to apply'
         : `migrations applied: ${applied.join(', ')}`,
+    );
+  });
+}
+
+/**
+ * Creates the pg-boss schema and one queue per job in `PLATFORM_JOBS`, then
+ * grants the runtime role what it needs inside that schema. Deploy-time work,
+ * with the owner connection, exactly like `migrate`: the runtime never creates
+ * a queue, so without this the production queue has nothing to work and
+ * approved actions are enqueued into a schema that does not exist.
+ *
+ * Idempotent — an existing queue is updated to the definition's current retry
+ * and expiry settings rather than recreated — so it belongs on every deploy,
+ * next to the migration step.
+ */
+async function jobsInstall(args: string[]): Promise<void> {
+  const { values } = parseArgs({ args, options: { role: { type: 'string' } } });
+  await withContainer(async (container) => {
+    const { config } = container;
+    if (config.jobs.driver !== 'pg-boss') {
+      fail(
+        `DOLMIR_JOBS_DRIVER is "${config.jobs.driver}"; nothing would use the schema this installs.`,
+        2,
+      );
+      return;
+    }
+    const ownerUrl = config.database.ownerUrl;
+    if (ownerUrl === undefined) {
+      fail('DOLMIR_DATABASE_OWNER_URL is required to install the job queue.', 2);
+      return;
+    }
+    // Whoever the runtime connects as is who gets the grants. Naming it twice
+    // is how the two drift apart; --role is for the deployments where they
+    // genuinely differ.
+    const runtimeRole =
+      values.role ?? runtimeRoleFromConnectionString(config.database.url.reveal());
+    const report = await installJobQueue({
+      ownerConnectionString: ownerUrl.reveal(),
+      schema: config.jobs.schema,
+      runtimeRole,
+      jobs: PLATFORM_JOBS,
+      logger: noopLogger,
+    });
+    out(
+      `job queue: schema=${report.schema} version=${String(report.schemaVersion)} role=${runtimeRole}`,
+    );
+    out(
+      `queues created: ${report.queuesCreated.length === 0 ? 'none' : report.queuesCreated.join(', ')}`,
+    );
+    out(
+      `queues updated: ${report.queuesUpdated.length === 0 ? 'none' : report.queuesUpdated.join(', ')}`,
     );
   });
 }
@@ -260,6 +320,9 @@ async function run(argv: string[]): Promise<void> {
   switch (command) {
     case 'migrate':
       await migrate();
+      return;
+    case 'jobs:install':
+      await jobsInstall(rest);
       return;
     case 'doctor':
       await doctor();

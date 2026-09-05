@@ -26,6 +26,9 @@ import {
   InMemoryJobQueue,
   IngestDocument,
   IngestMailboxMessage,
+  type JobDefinition,
+  type JobHandler,
+  type JobName,
   type JobQueuePort,
   type MailboxConnectorFactory,
   MailparserMimeParser,
@@ -68,6 +71,7 @@ import {
   DevTokenIssuer,
   EventLedger,
   type HttpFetch,
+  InfrastructureError,
   type LedgerRepository,
   ListUserOrganizations,
   type LlmProviderPort,
@@ -155,6 +159,18 @@ export interface ReadinessReport {
         }
       | { readonly status: 'unknown'; readonly code: string };
     readonly ai: { readonly status: 'ok' | 'not_configured'; readonly provider: string };
+    /**
+     * Whether this process is working the background queue, and with which
+     * adapter. Informational: the guarantee that a serving API also runs the
+     * workers is made at startup, where a failure to start them stops the
+     * process before it listens. This check makes that visible — and makes a
+     * process that was started without them impossible to mistake for a
+     * healthy one.
+     */
+    readonly jobs: {
+      readonly status: 'running' | 'not_running';
+      readonly driver: 'memory' | 'pg-boss';
+    };
   };
 }
 
@@ -222,9 +238,16 @@ export interface Container {
   };
   readonly jobs: {
     readonly queue: JobQueuePort;
-    /** Registers the handlers and, for pg-boss, starts polling. */
+    /**
+     * Registers a handler for every job in `PLATFORM_JOBS`, installs the
+     * recovery schedule and, for pg-boss, starts polling. Throws rather than
+     * half-starting: a caller that cannot start the background runtime must
+     * not go on to serve HTTP.
+     */
     start(): Promise<void>;
     stop(): Promise<void>;
+    /** The job names this process is currently working. Empty until `start()`. */
+    registered(): readonly JobName[];
   };
   readonly storage: ObjectStoragePort;
   readonly migrationsDirectory: string;
@@ -542,43 +565,111 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
     logger,
   });
 
-  let jobsStarted = false;
+  /**
+   * The background runtime's lifecycle. `idle` before it has run, `stopped`
+   * once it has been shut down — and a stopped runtime is not restarted in the
+   * same process, because the port allows one handler per job name and a
+   * second registration would create two.
+   */
+  let jobsState: 'idle' | 'running' | 'stopped' = 'idle';
+  let closed = false;
+  const registeredJobs: JobName[] = [];
+
+  const register = async <T extends object>(
+    job: JobDefinition<T>,
+    handler: JobHandler<T>,
+  ): Promise<void> => {
+    await jobQueue.work(job, handler);
+    registeredJobs.push(job.name);
+  };
+
   const startJobs = async (): Promise<void> => {
-    if (jobsStarted) return;
-    jobsStarted = true;
-    if (jobQueue instanceof PgBossJobQueue) await jobQueue.start();
-    await jobQueue.work(analyzeDocumentJob, async (payload) => {
-      const report = await analyzeDocument.execute(payload.tenantId, payload.documentId);
-      if (!report.ok) throw report.error;
+    if (jobsState === 'running') return;
+    if (jobsState === 'stopped') {
+      throw new InfrastructureError(
+        'JOB_RUNTIME_STOPPED',
+        'The background runtime has been shut down and is not restarted in the same process.',
+      );
+    }
+    try {
+      if (jobQueue instanceof PgBossJobQueue) await jobQueue.start();
+      await register(analyzeDocumentJob, async (payload) => {
+        const report = await analyzeDocument.execute(payload.tenantId, payload.documentId);
+        if (!report.ok) throw report.error;
+      });
+      // A handler, and deliberately no schedule: a poll happens when something
+      // asks for one. DOLMIR does not read a company's mailbox unattended.
+      await register(mailboxPollJob, async (payload) => {
+        const report = await pollMailbox.execute(payload.tenantId, payload.connectionId);
+        if (!report.ok) throw report.error;
+      });
+      // Carries out one authorised recommendation. The engine locks the
+      // entitlement, so a retry after success does nothing and two workers can
+      // never both act; a thrown failure is what makes the queue retry.
+      await register(executeRecommendationJob, async (payload) => {
+        const executed = await caseEngine.execute(payload.tenantId, payload.recommendationId);
+        if (!executed.ok) throw executed.error;
+      });
+      // Recovery closes the gap between committing an entitlement and enqueueing
+      // the work for it: a queue outage, a lost enqueue or a process that died in
+      // between leaves authorised work that nobody would otherwise do.
+      await register(recoverExecutionsJob, async () => {
+        await recoverExecutions.execute();
+      });
+      await jobQueue.schedule(recoverExecutionsJob, RECOVERY_CRON, {});
+    } catch (error) {
+      // Half a runtime is worse than none: it would serve HTTP while some
+      // authorised work had no worker. Undo what was started and let the caller
+      // refuse to boot.
+      //
+      // `stopped`, not back to `idle`: a `work()` that failed part-way through
+      // the list leaves the handlers before it registered, and the port allows
+      // one per job name. Retrying in this process would either duplicate them
+      // or fail on the first one. A new container is the way back.
+      jobsState = 'stopped';
+      registeredJobs.length = 0;
+      if (jobQueue instanceof PgBossJobQueue) {
+        try {
+          await jobQueue.stop();
+        } catch (stopError) {
+          logger.warn('the job queue could not be stopped after a failed start', {
+            error: stopError instanceof Error ? stopError.message : String(stopError),
+          });
+        }
+      }
+      throw error;
+    }
+    jobsState = 'running';
+    logger.info('background runtime started', {
+      driver: config.jobs.driver,
+      schema: config.jobs.schema,
+      jobs: [...registeredJobs],
+      scheduled: { [recoverExecutionsJob.name]: RECOVERY_CRON },
     });
-    await jobQueue.work(mailboxPollJob, async (payload) => {
-      const report = await pollMailbox.execute(payload.tenantId, payload.connectionId);
-      if (!report.ok) throw report.error;
-    });
-    // Carries out one authorised recommendation. The engine locks the
-    // entitlement, so a retry after success does nothing and two workers can
-    // never both act; a thrown failure is what makes the queue retry.
-    await jobQueue.work(executeRecommendationJob, async (payload) => {
-      const executed = await caseEngine.execute(payload.tenantId, payload.recommendationId);
-      if (!executed.ok) throw executed.error;
-    });
-    // Recovery closes the gap between committing an entitlement and enqueueing
-    // the work for it: a queue outage, a lost enqueue or a process that died in
-    // between leaves authorised work that nobody would otherwise do.
-    await jobQueue.work(recoverExecutionsJob, async () => {
-      await recoverExecutions.execute();
-    });
-    await jobQueue.schedule(recoverExecutionsJob, RECOVERY_CRON, {});
-    // And once now, because a process that has just started is exactly the
-    // case a periodic schedule is slowest to notice.
-    const recovered = await recoverExecutions.execute();
-    if (recovered.found > 0) {
-      logger.info('recovered unfinished executions at startup', { ...recovered });
+
+    // And one sweep now, because a process that has just started is exactly the
+    // case a periodic schedule is slowest to notice. Best effort on purpose:
+    // this is an optimisation over the cron, not a durability guarantee, and a
+    // database that is briefly unreachable must not stop a deployment that the
+    // readiness probe would otherwise report on honestly.
+    try {
+      const recovered = await recoverExecutions.execute();
+      if (recovered.found > 0) {
+        logger.info('recovered unfinished executions at startup', { ...recovered });
+      }
+    } catch (error) {
+      logger.warn('the startup recovery sweep did not run; the schedule will retry it', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   };
+
   const stopJobs = async (): Promise<void> => {
+    const wasRunning = jobsState === 'running';
+    jobsState = 'stopped';
+    registeredJobs.length = 0;
     if (jobQueue instanceof PgBossJobQueue) await jobQueue.stop();
-    jobsStarted = false;
+    if (wasRunning) logger.info('background runtime stopped');
   };
 
   return {
@@ -630,13 +721,29 @@ export function createContainer(config: Config, options: ContainerOptions = {}):
       analyze: analyzeDocument,
       systems,
     },
-    jobs: { queue: jobQueue, start: startJobs, stop: stopJobs },
+    jobs: {
+      queue: jobQueue,
+      start: startJobs,
+      stop: stopJobs,
+      registered: () => [...registeredJobs],
+    },
     storage,
     migrationsDirectory,
-    readiness: () => readiness(pool, migrationsDirectory, rawProvider.name),
+    readiness: () =>
+      readiness(pool, migrationsDirectory, rawProvider.name, {
+        status: jobsState === 'running' ? 'running' : 'not_running',
+        driver: config.jobs.driver,
+      }),
+    // Idempotent, and safe after a startup that only got half-way: shutting
+    // down twice must not fail, and `pool.end()` refuses a second call.
     close: async () => {
-      await stopJobs();
-      await pool.end();
+      if (closed) return;
+      closed = true;
+      try {
+        await stopJobs();
+      } finally {
+        await pool.end();
+      }
     },
   };
 }
@@ -645,6 +752,7 @@ async function readiness(
   pool: ReturnType<typeof createPostgresPool>,
   migrationsDirectory: string,
   providerName: string,
+  jobs: ReadinessReport['checks']['jobs'],
 ): Promise<ReadinessReport> {
   const database = await diagnoseDatabase(pool);
   const databaseCheck: ReadinessReport['checks']['database'] = database.ok
@@ -689,10 +797,13 @@ async function readiness(
     provider: providerName,
   };
 
+  // Readiness answers "can this process do useful work", which the CLI asks of a
+  // deployment that runs no workers at all (`dolmir doctor`). The background
+  // runtime is therefore reported, not required.
   const ready = databaseCheck.status === 'ok' && migrationsCheck.status === 'ok';
   return {
     status: ready ? 'ready' : 'not_ready',
-    checks: { database: databaseCheck, migrations: migrationsCheck, ai },
+    checks: { database: databaseCheck, migrations: migrationsCheck, ai, jobs },
   };
 }
 

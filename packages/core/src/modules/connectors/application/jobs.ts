@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { OrganizationIdSchema, ConnectionIdSchema } from '../../../kernel/ids.js';
-import { defineJob } from '../../../kernel/jobs.js';
+import { JobConcurrency, defineJob } from '../../../kernel/jobs.js';
 
 /**
  * Background work the connectors module owns (ADR-0014). Payloads are
@@ -14,6 +14,9 @@ export const mailboxPollJob = defineJob({
   retryLimit: 3,
   retryDelaySeconds: 60,
   expireInSeconds: 10 * 60,
+  // Parallel on purpose: one tenant's mailbox must never wait behind another's.
+  // Nothing enqueues a poll today, and nothing schedules one.
+  concurrency: JobConcurrency.PARALLEL,
 });
 
 /** Enqueues one poll per active mailbox connection; runs in system scope and is audited. */
@@ -23,4 +26,5 @@ export const mailboxScheduleJob = defineJob({
   retryLimit: 1,
   retryDelaySeconds: 30,
   expireInSeconds: 5 * 60,
+  concurrency: JobConcurrency.ONE_AT_A_TIME,
 });

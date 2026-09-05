@@ -3,6 +3,8 @@
  * process entry points (`main.ts`, `cli/main.ts`).
  */
 export { readEnvironment } from './composition/env.js';
+export { type Runtime, type StartRuntimeOptions, startRuntime } from './composition/bootstrap.js';
+export { type InstallableJob, PLATFORM_JOBS } from './composition/jobs.js';
 export {
   type Container,
   type ContainerOptions,

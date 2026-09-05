@@ -15,6 +15,28 @@ export const JobNameSchema = z
   .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, 'job name must look like area.verb');
 export type JobName = z.infer<typeof JobNameSchema>;
 
+/**
+ * How many jobs of one kind may exist at the same time.
+ *
+ * This is a property of the work, not of an adapter, and it is what gives
+ * `idempotencyKey` its meaning: asking twice for something already asked for
+ * must not do it twice. A queue adapter has to enforce it — pg-boss will
+ * happily hold two identical jobs unless the queue is created to refuse them —
+ * so it belongs on the definition, where both adapters can read it and
+ * `installJobQueue` can create the queue accordingly.
+ */
+export const JobConcurrency = {
+  /** Any number may be queued and run at once. */
+  PARALLEL: 'parallel',
+  /**
+   * At most one exists at a time, queued or running: per idempotency key when
+   * one is given, per job when none is. A second request while the first is
+   * outstanding is answered with the first (`deduplicated: true`).
+   */
+  ONE_AT_A_TIME: 'one_at_a_time',
+} as const;
+export type JobConcurrency = (typeof JobConcurrency)[keyof typeof JobConcurrency];
+
 export interface JobDefinition<T extends object> {
   readonly name: JobName;
   readonly payload: z.ZodType<T>;
@@ -24,6 +46,7 @@ export interface JobDefinition<T extends object> {
   readonly retryDelaySeconds: number;
   /** A job still running after this long is failed and retried. */
   readonly expireInSeconds: number;
+  readonly concurrency: JobConcurrency;
 }
 
 export interface DefineJobInput<T extends object> {
@@ -32,6 +55,8 @@ export interface DefineJobInput<T extends object> {
   readonly retryLimit?: number;
   readonly retryDelaySeconds?: number;
   readonly expireInSeconds?: number;
+  /** Default `PARALLEL`: unrestricted, which is what most work wants. */
+  readonly concurrency?: JobConcurrency;
 }
 
 export function defineJob<T extends object>(input: DefineJobInput<T>): JobDefinition<T> {
@@ -49,11 +74,17 @@ export function defineJob<T extends object>(input: DefineJobInput<T>): JobDefini
     retryLimit: input.retryLimit ?? 3,
     retryDelaySeconds: input.retryDelaySeconds ?? 30,
     expireInSeconds: input.expireInSeconds ?? 15 * 60,
+    concurrency: input.concurrency ?? JobConcurrency.PARALLEL,
   });
 }
 
 export interface EnqueueOptions {
-  /** Same key → one job, however many times it is enqueued while that job is queued or running. */
+  /**
+   * Same key → one job, however many times it is enqueued while that job is
+   * outstanding — on a `ONE_AT_A_TIME` job. On a `PARALLEL` job the key is
+   * carried but deduplicates nothing, because that job said it may run
+   * alongside itself.
+   */
   readonly idempotencyKey?: string;
   /** Do not start before this many seconds have passed. */
   readonly delaySeconds?: number;

@@ -207,7 +207,7 @@ There is no dashboard yet. The API and the CLI are the whole surface.
 
 - **No live mailbox has ever been used.** The IMAP and SMTP adapter compiles, is bounded by timeouts and is unit-tested against a fake client. Connecting a real account is a deployment task and it may reveal problems this suite cannot.
 - **No dashboard.** Reading a case means reading JSON.
-- **pg-boss is not exercised end to end.** `dolmir jobs:migrate` does not exist yet, so `DOLMIR_JOBS_DRIVER=pg-boss` is untested; the in-memory queue runs handlers in the same process and loses them on restart.
+- **The demo runs on the in-memory queue.** `DOLMIR_JOBS_DRIVER=memory` runs handlers in the same process and loses queued work on restart, which is why production refuses it. The pg-boss path is installed with `dolmir jobs:install` and is exercised against real PostgreSQL in `tests/integration/job-runtime.test.ts` and, as a real process, in `tests/e2e/runtime-lifecycle.test.ts`.
 - **No retention, deletion or export.** See `privacy.md`; erasure against an immutable ledger is an open decision.
 - **The Anthropic contract tests replay synthesised exchanges**, not recordings of real calls, because no key was available when they were written.
 - **`claude-haiku-4-5` has no price in the cost book**, so the drafting call reports its tokens with `priced: false` and a zero estimate. Adding the price is one entry in `packages/core/src/ai/usage/cost-book.ts` under a new version.
