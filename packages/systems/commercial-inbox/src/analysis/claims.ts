@@ -502,21 +502,48 @@ function mask(text: string, start: number, length: number): string {
   return text.slice(0, start) + MASK.repeat(length) + text.slice(start + length);
 }
 
+/**
+ * Masks a grounded phrase only where it stands as a whole token, never as a
+ * fragment of a longer one.
+ *
+ * `DN` is a term a company teaches DOLMIR (diametro nominale) and `DN250` is
+ * an article its catalogue carries. Masking the term inside the code would
+ * leave `xx250` behind, and the scans that follow would then read `250` as a
+ * quantity nobody verified and `xx250` as a word nobody wrote \u2014 refusing a
+ * reply whose every value is grounded. A fragment is therefore left alone, so
+ * `maskGroundedWords` and the word scan judge the whole token it belongs to.
+ *
+ * Leaving a fragment unmasked can only add violations, never remove them: what
+ * survives here still has to be grounded by a later step to pass.
+ */
 function maskPhrases(text: string, phrases: readonly string[]): string {
   let masked = text;
   for (const phrase of phrases) {
     if (phrase.length < 2) continue;
     const needle = phrase.toLowerCase();
-    for (;;) {
-      const at = masked.toLowerCase().indexOf(needle);
+    for (let from = 0; ;) {
+      const at = masked.toLowerCase().indexOf(needle, from);
       if (at < 0) break;
-      masked = mask(masked, at, needle.length);
+      const end = at + needle.length;
+      if (standsAlone(masked, at, end)) masked = mask(masked, at, needle.length);
+      from = end;
     }
   }
   return masked;
 }
 
 const WORD = /[\p{L}\p{N}][\p{L}\p{N}.'\u2019-]*/gu;
+
+/** What `WORD` absorbs into the token it is already reading. */
+const TOKEN_CHARACTER = /[\p{L}\p{N}.'\u2019-]/u;
+
+/** True when nothing on either side would make the span part of a longer token. */
+function standsAlone(text: string, start: number, end: number): boolean {
+  return (
+    !TOKEN_CHARACTER.test(start === 0 ? '' : text.charAt(start - 1)) &&
+    !TOKEN_CHARACTER.test(text.charAt(end))
+  );
+}
 
 /**
  * Masks a grounded name wherever it stands alone, so the digits inside an

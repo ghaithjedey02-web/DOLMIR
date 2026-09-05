@@ -86,15 +86,15 @@ function rulesWith(patch: Partial<CommercialInboxRules> = {}): CommercialInboxRu
   };
 }
 
-function factsFor(rules: CommercialInboxRules, analysis = analysisWith()) {
+function factsFor(rules: CommercialInboxRules, analysis = analysisWith(), context = company) {
   const request = {
     analysis,
     completeness: { missing: [] },
-    company,
+    company: context,
     rules,
   } as unknown as DraftRequest;
-  const brief = buildBrief(analysis, request, company, rules);
-  return { brief, facts: buildGroundedFacts(brief, company) };
+  const brief = buildBrief(analysis, request, context, rules);
+  return { brief, facts: buildGroundedFacts(brief, context) };
 }
 
 /** The company has promised its counterparts three working days. */
@@ -248,6 +248,67 @@ describe('grounded drafts are accepted', () => {
 
   it('accepts the safe wording when no deadline is authorised', () => {
     expect(report('Vi daremo riscontro dopo la valutazione interna.', internalOnly.facts)).toBe('');
+  });
+});
+
+describe('a company term never breaks the article code that contains it', () => {
+  /**
+   * The demo company teaches DOLMIR `DN` and `PN` — diametro and pressione
+   * nominale — and its catalogue carries `Flangia tornita S355 DN250 PN16`.
+   * The term is a prefix of the code, so masking it as a bare substring left
+   * `xx250` behind, and the scans that followed refused the reply for a
+   * quantity nobody had written and a word nobody had used. What a company
+   * writes down about its own vocabulary must never decide whether a grounded
+   * value is accepted.
+   */
+  const taught = factsFor(rulesWith({ quotationCustomerCommitmentDays: 3 }), analysisWith(), {
+    ...company,
+    terminology: [
+      { term: 'DN', meaning: 'Diametro nominale di una flangia, in millimetri.' },
+      { term: 'PN', meaning: 'Pressione nominale di una flangia, in bar.' },
+      { term: 'RdO', meaning: 'Richiesta di offerta.' },
+    ],
+  } as unknown as CompanyContext);
+
+  it.each([
+    ['the subject the system writes', 'Re: Richiesta di preventivo - flange DN250'],
+    ['the article code on its own', 'DN250'],
+    ['the article as the catalogue names it', 'flangia tornita S355 DN250 PN16'],
+    [
+      'the article inside a whole sentence',
+      'Confermiamo 500 pz di FL-250, flangia tornita S355 DN250 PN16.',
+    ],
+  ])('accepts %s', (_label, text) => {
+    expect(report(text, taught.facts)).toBe('');
+  });
+
+  it('reaches the same verdict on a reply whether or not the terms are taught', () => {
+    for (const text of [
+      'Confermiamo 500 pz di FL-250, flangia tornita S355 DN250 PN16.',
+      'Vi proponiamo invece la flangia DN300.',
+      'Vi proponiamo invece la flangia PN40.',
+      "Il riferimento e' RdO123.",
+    ]) {
+      expect(`${text} -> ${report(text, taught.facts)}`).toBe(
+        `${text} -> ${report(text, committed.facts)}`,
+      );
+    }
+  });
+
+  it.each([
+    ['a diameter the catalogue does not carry', 'Vi proponiamo invece la flangia DN300.'],
+    ['a pressure rating the catalogue does not carry', 'Vi proponiamo invece la flangia PN40.'],
+    ['a code a taught term merely opens', "Il riferimento e' RdO123."],
+  ])('still refuses %s', (_label, text) => {
+    expect(check(text, taught.facts).length).toBeGreaterThan(0);
+  });
+
+  it('still grounds the term itself where it stands as a word', () => {
+    const text = "Il DN richiesto e' 250.";
+    // Taught, the term grounds the word; untaught, the same word is refused —
+    // so the boundary rule narrows where a phrase matches, never what it grounds.
+    expect(check(text, taught.facts)).not.toContain('unverified_reference');
+    expect(check(text, committed.facts)).toContain('unverified_reference');
   });
 });
 
