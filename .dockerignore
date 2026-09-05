@@ -1,0 +1,26 @@
+# What the image build may see. The Dockerfile copies explicitly, so this list
+# is a second line of defence, and its first purpose is that no secret and no
+# local state can reach a build context by accident.
+.git
+.github
+.env
+.env.*
+*.log
+.dolmir
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+coverage
+.vitest
+.eslintcache
+.dependency-cruiser-cache
+tests
+docs
+demo
+docker-compose.yml
+Dockerfile
+.dockerignore
+.vscode
+.idea
+.DS_Store

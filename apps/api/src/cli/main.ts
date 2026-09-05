@@ -12,6 +12,8 @@ import { type Container, createContainer } from '../composition/container.js';
 import { readEnvironment } from '../composition/env.js';
 import { PLATFORM_JOBS } from '../composition/jobs.js';
 import { demoCase, demoCases, demoDecide, demoSeed, demoSend } from './demo.js';
+import { type PreflightReport, runPreflight } from './preflight.js';
+import { type SafetyReport, runSafety } from './safety.js';
 
 /**
  * Operator commands. Every command validates configuration first and prints
@@ -20,6 +22,8 @@ import { demoCase, demoCases, demoDecide, demoSeed, demoSend } from './demo.js';
  *   dolmir migrate                          apply pending migrations (owner connection)
  *   dolmir jobs:install                     create the job queue schema and queues (owner connection)
  *   dolmir doctor                           configuration, database, role, migrations, AI provider
+ *   dolmir preflight                        would this deployment start and work? (exit 1 if not)
+ *   dolmir safety                           could the AI act outside DOLMIR without a human? (exit 1 if so)
  *   dolmir dev-token --subject <sub> [--email <e>] [--name <n>] [--ttl-seconds <s>]
  *   dolmir provision-org --slug <s> --name <n> --owner-subject <sub> [--owner-email <e>] [--owner-name <n>]
  */
@@ -27,6 +31,8 @@ const USAGE = `usage:
   dolmir migrate
   dolmir jobs:install [--role <name>]
   dolmir doctor
+  dolmir preflight
+  dolmir safety
   dolmir dev-token --subject <sub> [--email <e>] [--name <n>] [--ttl-seconds <s>]
   dolmir provision-org --slug <s> --name <n> --owner-subject <sub> [--owner-email <e>] [--owner-name <n>]
 
@@ -161,6 +167,58 @@ async function doctor(): Promise<void> {
     out(`readiness: ${report.status}`);
     if (report.status !== 'ready') process.exitCode = 1;
   });
+}
+
+/** Every check on one line, problems to stderr, exit 1 when any check failed. */
+async function preflight(): Promise<void> {
+  await withContainer(async (container) => {
+    const report = await runPreflight(container);
+    renderPreflight(report);
+  });
+}
+
+function renderPreflight(report: PreflightReport): void {
+  const width = Math.max(...report.checks.map((check) => check.name.length));
+  for (const check of report.checks) {
+    out(`[${check.status.toUpperCase().padEnd(4)}] ${check.name.padEnd(width)}  ${check.detail}`);
+  }
+  const failed = report.checks.filter((check) => check.status === 'fail').length;
+  const warned = report.checks.filter((check) => check.status === 'warn').length;
+  if (report.ok) {
+    out(
+      `preflight: OK${warned === 0 ? '' : ` (${String(warned)} warning${warned === 1 ? '' : 's'})`}`,
+    );
+  } else {
+    fail(
+      `preflight: FAILED — ${String(failed)} check${failed === 1 ? '' : 's'} failed; do not start`,
+      1,
+    );
+  }
+}
+
+/** Read-only. Exit 1 when anything could let the AI act externally without a human. */
+async function safety(): Promise<void> {
+  await withContainer(async (container) => {
+    const report = await runSafety(container);
+    renderSafety(report);
+  });
+}
+
+function renderSafety(report: SafetyReport): void {
+  for (const section of report.sections) {
+    out(section.title);
+    for (const line of section.lines) out(`  ${line}`);
+    out('');
+  }
+  if (report.ok) {
+    out('posture: SAFE — no action can complete without a human approving it');
+  } else {
+    for (const reason of report.unsafe) out(`UNSAFE: ${reason}`);
+    fail(
+      `posture: UNSAFE — ${String(report.unsafe.length)} condition${report.unsafe.length === 1 ? '' : 's'} would let the AI act without a human`,
+      1,
+    );
+  }
 }
 
 async function devToken(args: string[]): Promise<void> {
@@ -326,6 +384,12 @@ async function run(argv: string[]): Promise<void> {
       return;
     case 'doctor':
       await doctor();
+      return;
+    case 'preflight':
+      await preflight();
+      return;
+    case 'safety':
+      await safety();
       return;
     case 'dev-token':
       await devToken(rest);

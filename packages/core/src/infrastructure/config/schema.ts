@@ -98,6 +98,28 @@ export const EnvSchema = z
         message: 'must be pg-boss in production (in-memory jobs are lost on restart)',
       });
     }
+    if (env.DOLMIR_ENV === 'production' && env.DOLMIR_STORAGE_DRIVER === 'memory') {
+      // The extracted text of a document survives in PostgreSQL; the document
+      // itself — the evidence every provenance claim points back to — would
+      // not survive a restart. Development and tests may accept that; a
+      // deployment may not.
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DOLMIR_STORAGE_DRIVER'],
+        message:
+          'must be local in production (the in-memory store loses every ingested document on restart)',
+      });
+    }
+    if (env.DOLMIR_ENV === 'production' && env.DOLMIR_AI_PROVIDER !== 'anthropic') {
+      // `none` analyses nothing and `fake` answers from a script: either one in
+      // a deployment is a case engine that opens cases on no model at all.
+      // Development and tests use both on purpose; production names a model.
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DOLMIR_AI_PROVIDER'],
+        message: `must be anthropic in production ("${env.DOLMIR_AI_PROVIDER}" runs no model and would analyse nothing)`,
+      });
+    }
     const hasJwks = env.DOLMIR_AUTH_JWKS_URL !== undefined;
     const hasHs256 = env.DOLMIR_AUTH_HS256_SECRET !== undefined;
     if (hasJwks === hasHs256) {

@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
-import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -42,9 +44,13 @@ interface RunningProcess {
 
 let db: TestDatabase;
 let api: RunningProcess;
+let objectRoot: string;
 
 beforeAll(async () => {
   db = await createTestDatabase();
+  // Production refuses the in-memory object store, so the process gets a real
+  // directory to hold documents in — empty, and removed afterwards.
+  objectRoot = await mkdtemp(join(tmpdir(), 'dolmir-objects-'));
   // The deploy step this repository was missing: without it the queues do not
   // exist and the process below cannot start at all.
   await installJobQueue({
@@ -61,6 +67,7 @@ beforeAll(async () => {
 afterAll(async () => {
   api.child.kill('SIGKILL');
   await db.drop();
+  await rm(objectRoot, { recursive: true, force: true });
 });
 
 describe('a production process', () => {
@@ -103,6 +110,7 @@ describe('a production process', () => {
   it('never writes a secret to its logs', () => {
     const output = JSON.stringify(api.lines()) + api.stderr();
     expect(output).not.toContain(SECRETS_KEY);
+    expect(output).not.toContain(PLACEHOLDER_API_KEY);
     expect(output).not.toContain('dolmir_app_test');
     expect(output).not.toContain(db.appUrl);
   });
@@ -133,6 +141,13 @@ describe('a production process', () => {
 });
 
 const SECRETS_KEY = Buffer.alloc(32, 23).toString('base64');
+/**
+ * Production requires a model, so the process is configured with one. The key
+ * is a placeholder: nothing in this test analyses a document, so the SDK
+ * client is built and never used, and the value never leaves the process —
+ * which the log assertion above checks.
+ */
+const PLACEHOLDER_API_KEY = 'sk-ant-test-placeholder-never-sent';
 
 async function start(port: number): Promise<RunningProcess> {
   // Only the variables this deployment is configured with: anything left over
@@ -155,7 +170,10 @@ async function start(port: number): Promise<RunningProcess> {
     DOLMIR_JOBS_DRIVER: 'pg-boss',
     DOLMIR_JOBS_SCHEMA: SCHEMA,
     DOLMIR_MAILBOX_DRIVER: 'imap_smtp',
-    DOLMIR_AI_PROVIDER: 'none',
+    DOLMIR_STORAGE_DRIVER: 'local',
+    DOLMIR_STORAGE_LOCAL_ROOT: objectRoot,
+    DOLMIR_AI_PROVIDER: 'anthropic',
+    DOLMIR_AI_ANTHROPIC_API_KEY: PLACEHOLDER_API_KEY,
   });
 
   const child = spawn(TSX, ['--conditions=development', MAIN], {

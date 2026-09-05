@@ -11,6 +11,22 @@ const minimal = {
   DOLMIR_AUTH_HS256_SECRET: 'dev-only-secret-change-me-please-32chars',
 };
 
+/**
+ * Everything production insists on beyond the minimum. Each entry exists
+ * because its default would lose or fabricate data in a deployment: work held
+ * only in memory, documents held only in memory, connector credentials that
+ * cannot be stored, a mailbox that never sends, a model that never runs.
+ */
+const productionRequirements = {
+  DOLMIR_ENV: 'production',
+  DOLMIR_SECRETS_KEY: Buffer.alloc(32, 3).toString('base64'),
+  DOLMIR_JOBS_DRIVER: 'pg-boss',
+  DOLMIR_STORAGE_DRIVER: 'local',
+  DOLMIR_STORAGE_LOCAL_ROOT: '/var/lib/dolmir/objects',
+  DOLMIR_AI_PROVIDER: 'anthropic',
+  DOLMIR_AI_ANTHROPIC_API_KEY: 'sk-ant-test-placeholder-never-sent',
+};
+
 describe('loadConfig', () => {
   it('applies development defaults to a minimal environment', () => {
     const result = loadConfig(minimal);
@@ -26,13 +42,7 @@ describe('loadConfig', () => {
   });
 
   it('switches to json logs at info level outside development', () => {
-    const result = loadConfig({
-      ...minimal,
-      DOLMIR_ENV: 'production',
-      // Production also demands a secrets key and a durable job queue (ADR-0013, ADR-0014).
-      DOLMIR_SECRETS_KEY: Buffer.alloc(32, 3).toString('base64'),
-      DOLMIR_JOBS_DRIVER: 'pg-boss',
-    });
+    const result = loadConfig({ ...minimal, ...productionRequirements });
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.log).toEqual({ level: 'info', format: 'json' });
   });
@@ -145,14 +155,94 @@ describe('loadConfig', () => {
     if (!production.ok) {
       const problems = production.error.details['problems'] as { variable: string }[];
       expect(problems.map((p) => p.variable).sort()).toEqual([
+        'DOLMIR_AI_PROVIDER',
         'DOLMIR_JOBS_DRIVER',
         'DOLMIR_SECRETS_KEY',
+        'DOLMIR_STORAGE_DRIVER',
       ]);
     }
     const defaults = loadConfig(minimal);
     if (!defaults.ok) throw new Error(defaults.error.message);
     expect(defaults.value.secrets.key).toBeUndefined();
     expect(defaults.value.jobs.driver).toBe('memory');
+  });
+
+  it('refuses the in-memory object store in production, and accepts it everywhere else', () => {
+    // A document's extracted text lives in PostgreSQL; the document itself —
+    // the evidence provenance points back to — would live only in this
+    // process. A restart would leave claims that cite bytes that no longer
+    // exist.
+    const memory = loadConfig({
+      ...minimal,
+      ...productionRequirements,
+      DOLMIR_STORAGE_DRIVER: 'memory',
+      DOLMIR_STORAGE_LOCAL_ROOT: '',
+    });
+    expect(memory.ok).toBe(false);
+    if (!memory.ok) {
+      expect(memory.error.message).toContain('DOLMIR_STORAGE_DRIVER');
+      expect(memory.error.message).toContain('loses every ingested document');
+    }
+
+    // Omitting the driver is the same as choosing memory: the default is not a
+    // way around the rule.
+    const omitted = loadConfig({
+      ...minimal,
+      ...productionRequirements,
+      DOLMIR_STORAGE_DRIVER: '',
+      DOLMIR_STORAGE_LOCAL_ROOT: '',
+    });
+    expect(omitted.ok).toBe(false);
+    if (!omitted.ok) expect(omitted.error.message).toContain('DOLMIR_STORAGE_DRIVER');
+
+    for (const env of ['development', 'test']) {
+      const allowed = loadConfig({ ...minimal, DOLMIR_ENV: env });
+      if (!allowed.ok) throw new Error(allowed.error.message);
+      expect(allowed.value.storage.driver).toBe('memory');
+    }
+  });
+
+  it('refuses a deployment that runs no model, and accepts one everywhere else', () => {
+    for (const provider of ['none', 'fake']) {
+      const result = loadConfig({
+        ...minimal,
+        ...productionRequirements,
+        DOLMIR_AI_PROVIDER: provider,
+        DOLMIR_AI_ANTHROPIC_API_KEY: '',
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('DOLMIR_AI_PROVIDER');
+        expect(result.error.message).toContain(`"${provider}" runs no model`);
+      }
+    }
+
+    // The default is `none`; omitting the variable is refused for the same reason.
+    const omitted = loadConfig({
+      ...minimal,
+      ...productionRequirements,
+      DOLMIR_AI_PROVIDER: '',
+      DOLMIR_AI_ANTHROPIC_API_KEY: '',
+    });
+    expect(omitted.ok).toBe(false);
+    if (!omitted.ok) expect(omitted.error.message).toContain('DOLMIR_AI_PROVIDER');
+
+    // And the model still needs its key: the provider rule does not replace the key rule.
+    const keyless = loadConfig({
+      ...minimal,
+      ...productionRequirements,
+      DOLMIR_AI_ANTHROPIC_API_KEY: '',
+    });
+    expect(keyless.ok).toBe(false);
+    if (!keyless.ok) expect(keyless.error.message).toContain('DOLMIR_AI_ANTHROPIC_API_KEY');
+
+    for (const env of ['development', 'test']) {
+      for (const provider of ['none', 'fake']) {
+        const allowed = loadConfig({ ...minimal, DOLMIR_ENV: env, DOLMIR_AI_PROVIDER: provider });
+        if (!allowed.ok) throw new Error(allowed.error.message);
+        expect(allowed.value.ai.provider).toBe(provider);
+      }
+    }
   });
 
   it('returns a frozen configuration object', () => {

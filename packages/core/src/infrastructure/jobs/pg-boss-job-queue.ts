@@ -231,6 +231,94 @@ export async function installJobQueue(
   }
 }
 
+/** Anything that runs a parameterised query: a `pg.Pool` or a `pg.Client`. */
+export interface SqlQueryable {
+  query(text: string, values?: readonly unknown[]): Promise<{ rows: unknown[] }>;
+}
+
+export interface JobQueueInspection {
+  readonly schema: string;
+  readonly schemaPresent: boolean;
+  /** One entry per job the deployment ships, present in the database or not. */
+  readonly queues: readonly {
+    readonly name: string;
+    readonly present: boolean;
+    readonly policy: string | null;
+    readonly expectedPolicy: string;
+    /** Present, and on the policy its job's concurrency requires. */
+    readonly ok: boolean;
+  }[];
+  /** What pg-boss will enqueue on its own. Empty schema → empty list. */
+  readonly schedules: readonly {
+    readonly name: string;
+    readonly key: string;
+    readonly cron: string;
+    readonly timezone: string | null;
+  }[];
+}
+
+/**
+ * Reads what `installJobQueue` should have left behind, and changes nothing.
+ *
+ * Runs with the runtime connection (it has SELECT on the jobs schema) so an
+ * operator can ask a deployment "would your workers have queues to work?"
+ * before it starts — or "what will the queue do on its own?" afterwards — with
+ * no owner credentials and no side effects. A missing schema is an answer,
+ * not an error: every queue is reported absent.
+ */
+export async function inspectJobQueue(
+  db: SqlQueryable,
+  options: {
+    readonly schema: string;
+    readonly jobs: readonly Pick<JobDefinition<object>, 'name' | 'concurrency'>[];
+  },
+): Promise<JobQueueInspection> {
+  assertIdentifier(options.schema, 'schema');
+  const { schema } = options;
+
+  const namespace = await db.query('SELECT 1 FROM pg_namespace WHERE nspname = $1', [schema]);
+  const schemaPresent = namespace.rows.length > 0;
+
+  const policies = new Map<string, string | null>();
+  const schedules: JobQueueInspection['schedules'][number][] = [];
+  if (schemaPresent) {
+    // The identifier was validated above; it is never user input at runtime.
+    const queues = await db.query(`SELECT name, policy FROM ${schema}.queue`);
+    for (const row of queues.rows as { name: string; policy: string | null }[]) {
+      policies.set(row.name, row.policy);
+    }
+    const scheduled = await db.query(
+      `SELECT name, key, cron, timezone FROM ${schema}.schedule ORDER BY name, key`,
+    );
+    for (const row of scheduled.rows as {
+      name: string;
+      key: string;
+      cron: string;
+      timezone: string | null;
+    }[]) {
+      schedules.push({ name: row.name, key: row.key, cron: row.cron, timezone: row.timezone });
+    }
+  }
+
+  return {
+    schema,
+    schemaPresent,
+    queues: options.jobs.map((job) => {
+      const present = policies.has(job.name);
+      const policy = policies.get(job.name) ?? null;
+      const expectedPolicy = policyFor(job.concurrency);
+      return {
+        name: job.name,
+        present,
+        policy,
+        expectedPolicy,
+        ok: present && policy === expectedPolicy,
+      };
+    }),
+    schedules,
+  };
+}
+
 /**
  * DOLMIR's concurrency vocabulary in pg-boss's.
  *

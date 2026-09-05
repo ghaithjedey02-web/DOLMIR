@@ -44,6 +44,12 @@ const productionEnv = {
   DOLMIR_ENV: 'production',
   DOLMIR_SECRETS_KEY: Buffer.alloc(32, 7).toString('base64'),
   DOLMIR_JOBS_DRIVER: 'pg-boss',
+  DOLMIR_STORAGE_DRIVER: 'local',
+  DOLMIR_STORAGE_LOCAL_ROOT: '/var/lib/dolmir/objects',
+  DOLMIR_AI_PROVIDER: 'anthropic',
+  // A placeholder the SDK client is built with and nothing ever sends: no
+  // test here reaches the network.
+  DOLMIR_AI_ANTHROPIC_API_KEY: 'sk-ant-test-placeholder-never-sent',
 };
 
 let open: Container | undefined;
@@ -75,11 +81,7 @@ describe('the queue a configuration produces', () => {
     expect(memory.ok).toBe(false);
     if (!memory.ok) expect(memory.error.message).toContain('DOLMIR_JOBS_DRIVER');
 
-    const omitted = loadConfig({
-      ...base,
-      DOLMIR_ENV: 'production',
-      DOLMIR_SECRETS_KEY: productionEnv.DOLMIR_SECRETS_KEY,
-    });
+    const omitted = loadConfig({ ...base, ...productionEnv, DOLMIR_JOBS_DRIVER: '' });
     expect(omitted.ok).toBe(false);
   });
 });

@@ -5,6 +5,15 @@
 export { readEnvironment } from './composition/env.js';
 export { type Runtime, type StartRuntimeOptions, startRuntime } from './composition/bootstrap.js';
 export { type InstallableJob, PLATFORM_JOBS } from './composition/jobs.js';
+// Operator commands, exposed so integration tests can run the real ones.
+export {
+  type CheckStatus,
+  type PreflightCheck,
+  type PreflightOptions,
+  type PreflightReport,
+  runPreflight,
+} from './cli/preflight.js';
+export { type SafetyReport, type SafetySection, runSafety } from './cli/safety.js';
 export {
   type Container,
   type ContainerOptions,
